@@ -1,0 +1,11 @@
+{
+  "name": "DeckRecall",
+  "author": "eck",
+  "flags": ["root"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["backup", "diagnostics", "steam-deck"],
+    "description": "Safe per-game compatibility-state snapshots and rollback.",
+    "image": "https://opengraph.githubassets.com/1/zliu9732-hub/DeckRecall"
+  }
+}
