@@ -1,6 +1,6 @@
 {
   "name": "deckrecall",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "description": "SteamOS Decky Loader plugin for safe game-state snapshots",
   "type": "module",
@@ -14,10 +14,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zliu9732-hub/DeckRecall.git"
+    "url": "git+https://github.com/Ren-Amamiya-pixle/DeckRecall.git"
   },
-  "homepage": "https://github.com/zliu9732-hub/DeckRecall#readme",
-  "bugs": { "url": "https://github.com/zliu9732-hub/DeckRecall/issues" },
+  "homepage": "https://github.com/Ren-Amamiya-pixle/DeckRecall#readme",
+  "bugs": { "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/issues" },
   "keywords": ["decky", "steamos", "steam-deck", "snapshot", "rollback"],
   "dependencies": {
     "@decky/api": "^1.1.3",

@@ -20,7 +20,7 @@ An independent [Decky Loader](https://decky.xyz/) plugin for SteamOS that rememb
 - **Trainer** links to [flingtrainer.com](https://flingtrainer.com/), starts the file picker in `/home/deck/Documents` (Steam's built-in browser default), and launches the selected Windows `.exe` or `.bat` with Proton's remote-debug command support.
 - **Little Yellow Duck / LSFG-VK** adds `~/lsfg`; it requires Lossless Scaling and the `decky-lsfg-vk` plugin.
 - **FSR4 / OptiScaler** adds `~/fgmod/fgmod`; it requires the `Decky-Framegen` plugin and the appropriate FSR4 runtime configured there.
-- Chinese LSFG/FSR plugin bundles are fetched first from the toolbox's pinned Gitee archive, then fall back to GitHub mirrors.
+- Chinese LSFG/FSR plugin bundles are downloaded directly as individual archives through ghfast, with resumable transfers, live progress, SHA-256 verification, and direct GitHub fallback.
 - **Fully remove FSR4 / OptiScaler** replaces the normal FSR4 wrapper with Decky-Framegen's `~/fgmod/fgmod-uninstaller.sh %command%`. Apply it and run the affected game once to remove its patch; then turn the option off and apply again, or restore the original launch options.
 - All three options are independent and can be composed into one launch command, using `--` between wrapper commands.
 - DeckRecall records the exact original launch options before its first change. “Restore original launch options” puts them back verbatim.
@@ -34,7 +34,7 @@ An independent [Decky Loader](https://decky.xyz/) plugin for SteamOS that rememb
 
 ## Virtual memory
 
-DeckRecall's Quick Access panel reads the current virtual-memory state and can apply the same recommended combination as the Zhoukeer toolbox: zram sized to half of physical RAM with priority 100, an 8-16 GB disk swap with priority 10, and `vm.swappiness = 1`.
+DeckRecall's Quick Access panel reads the current virtual-memory state and can apply a recommended combination: zram sized to half of physical RAM with priority 100, an 8-16 GB disk swap with priority 10, and `vm.swappiness = 1`.
 
 The backend needs Decky's root flag, which DeckRecall requests through `plugin.json`. Only files whose managed line is `# Managed by DeckRecall` are replaced or removed. If a system memory config was created by another tool, DeckRecall leaves it untouched. Restore disables DeckRecall's swap unit, removes only DeckRecall's zram, sysctl and fallback swap files, and never deletes SteamOS's original `/home/swapfile`.
 

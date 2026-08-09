@@ -1,4 +1,4 @@
-import { addEventListener, callable, FileSelectionType, openFilePicker, routerHook, toaster } from "@decky/api";
+import { addEventListener, callable, FileSelectionType, openFilePicker, removeEventListener, routerHook, toaster } from "@decky/api";
 import {
   ButtonItem,
   definePlugin,
@@ -637,12 +637,15 @@ function GameContent({ appId }: { appId: string }) {
   };
 
   useEffect(() => {
-    const listener = (kind: string, phase: string, percent: number) => {
-      if ((kind === "lsfg" || kind === "fsr4") && typeof phase === "string" && typeof percent === "number") {
-        setPluginInstallProgress({ phase, percent });
-      }
-    };
-    addEventListener("plugin_install_progress", listener);
+    const listener = addEventListener<[kind: string, phase: string, percent: number]>(
+      "plugin_install_progress",
+      (kind, phase, percent) => {
+        if ((kind === "lsfg" || kind === "fsr4") && typeof phase === "string" && typeof percent === "number") {
+          setPluginInstallProgress({ phase, percent });
+        }
+      },
+    );
+    return () => removeEventListener("plugin_install_progress", listener);
   }, []);
 
   const recommendedCompatTools = compatTools.filter(isRecommendedCompatTool);

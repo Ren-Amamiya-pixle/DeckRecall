@@ -42,28 +42,22 @@ GE_MIRROR_PREFIXES = (
     "https://gh.llkk.cc/", "https://mirror.ghproxy.com/", "https://gh.ddlc.com/",
     "https://gh-proxy.lanqier.me/", "https://ghfast.top/", "",
 )
-PLUGIN_MIRROR_PREFIXES = GE_MIRROR_PREFIXES
-GITEE_ARCHIVE_URL = "https://gitee.com/zliu9732-hub/zhoukeer-toolbox/repository/archive/v6.0.4.zip"
-GITEE_ARCHIVE_SHA256 = "cbe50c9dcd64bba1433713c1945ec73de2fa1cc51f8a8327ef0f9cdd0ace147a"
-GITEE_ARCHIVE_PREFIX = "zhoukeer-toolbox-v6.0.4"
-GITEE_ARCHIVE_SIZE = 138306798
-MAX_GITEE_ARCHIVE_SIZE = 256 * 1024 * 1024
+PLUGIN_DOWNLOAD_PREFIXES = ("https://ghfast.top/", "")
+PLUGIN_DOWNLOAD_CHUNK_SIZE = 64 * 1024
+PLUGIN_DOWNLOAD_STALL_TIMEOUT = 30
+PLUGIN_DOWNLOAD_MAX_STALLS = 8
 CHINESE_PLUGIN_RELEASES = {
     "lsfg": {
-        "url": "https://github.com/Ren-Amamiya-pixle/plugin-Chinese/releases/download/v1.1/lsfg-zh.zip",
+        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.2.8/lsfg-zh.zip",
         "sha256": "221794b84b2835b432905c3b69ddb90989749b08a6427e651399e22480756ef2",
-        "gitee_member": f"{GITEE_ARCHIVE_PREFIX}/dist/Decky-LSFG-VK-XiaoHuangYa-v0.12.5.zip",
-        "gitee_sha256": "11e3c13673e19662364cd86d77d6df7bf636c026ccaa2842421c37b982f73277",
         "directory": "Decky LSFG-VK",
         "size": 16437127,
     },
     "fsr4": {
-        "url": "https://github.com/Ren-Amamiya-pixle/plugin-Chinese/releases/download/v1.1/fsr4-zh.zip",
-        "sha256": "631c6da6d91f082148c5e752d81cd41bae3e117948daaff63acbabe8ace1ec92",
-        "gitee_member": f"{GITEE_ARCHIVE_PREFIX}/dist/Decky-Framegen-FSR4-v0.15.6.zip",
-        "gitee_sha256": "467e755f97c6ce1949f44980228490636d731d6f5451dc38553d1dd8b1d5609e",
+        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.2.8/fsr4-zh.zip",
+        "sha256": "f578ea48296eb7b4a5645aeaef084f0e6368ec285b79f845183e13fb9c4d5e53",
         "directory": "Decky-Framegen",
-        "size": 75874728,
+        "size": 198763093,
     },
 }
 
@@ -82,7 +76,6 @@ class Plugin:
         self.data_root = Path(os.environ.get("DECKRECALL_DATA_DIR", runtime_dir))
         self.data_root.mkdir(parents=True, exist_ok=True)
         self.plugin_download_progress: dict[str, dict[str, Any]] = {}
-        self.plugin_event_loop: asyncio.AbstractEventLoop | None = None
         self.memory: Any = None
 
     async def _main(self) -> None:
@@ -232,38 +225,37 @@ class Plugin:
         """Install one fixed, checksummed plugin archive without arbitrary URLs."""
         if plugin_id not in CHINESE_PLUGIN_RELEASES:
             raise ValueError("plugin_install_invalid")
-        self.plugin_event_loop = asyncio.get_running_loop()
-        self._set_plugin_progress(plugin_id, "plugin_download_phase", 0)
-        result = await asyncio.to_thread(self._install_chinese_plugin_sync, plugin_id)
-        self._set_plugin_progress(plugin_id, "plugin_complete_phase", 100)
-        self._event("0", "plugin_installed", {"plugin": plugin_id})
-        return result
+        release = CHINESE_PLUGIN_RELEASES[plugin_id]
+        await self._emit_plugin_progress(plugin_id, "plugin_download_phase", 0)
+        archive = await self._download_plugin_archive(release, plugin_id)
+        try:
+            await self._emit_plugin_progress(plugin_id, "plugin_verify_phase", 96)
+            actual_sha256 = await asyncio.to_thread(self._hash, archive)
+            if actual_sha256.lower() != release["sha256"]:
+                raise ValueError("plugin_install_checksum_failed")
+            await self._emit_plugin_progress(plugin_id, "plugin_install_phase", 98)
+            await asyncio.to_thread(self._safe_install_plugin_archive, archive, release["directory"])
+            await self._emit_plugin_progress(plugin_id, "plugin_complete_phase", 100)
+            self._event("0", "plugin_installed", {"plugin": plugin_id})
+            return {"ok": True, "plugin": plugin_id}
+        finally:
+            archive.unlink(missing_ok=True)
 
     async def get_plugin_install_progress(self, plugin_id: str) -> dict[str, Any]:
         if plugin_id not in CHINESE_PLUGIN_RELEASES:
             raise ValueError("plugin_install_invalid")
         return dict(self.plugin_download_progress.get(plugin_id, {"phase": "plugin_download_phase", "percent": 0}))
 
-    def _set_plugin_progress(self, plugin_id: str, phase: str, percent: int) -> None:
+    def _record_plugin_progress(self, plugin_id: str, phase: str, percent: int) -> dict[str, Any]:
         progress = {"phase": phase, "percent": max(0, min(100, int(percent)))}
         self.plugin_download_progress[plugin_id] = progress
-        if decky and self.plugin_event_loop:
-            asyncio.run_coroutine_threadsafe(
-                decky.emit("plugin_install_progress", plugin_id, progress["phase"], progress["percent"]),
-                self.plugin_event_loop,
-            )
+        return progress
 
-    def _install_chinese_plugin_sync(self, plugin_id: str) -> dict[str, Any]:
-        release = CHINESE_PLUGIN_RELEASES[plugin_id]
-        archive, expected_sha256 = self._download_plugin_archive(release, plugin_id)
-        try:
-            if self._hash(archive).lower() != expected_sha256:
-                raise ValueError("plugin_install_checksum_failed")
-            self._set_plugin_progress(plugin_id, "plugin_verify_phase", 96)
-            self._safe_install_plugin_archive(archive, release["directory"])
-            return {"ok": True, "plugin": plugin_id}
-        finally:
-            archive.unlink(missing_ok=True)
+    async def _emit_plugin_progress(self, plugin_id: str, phase: str, percent: int) -> None:
+        """Emit from Decky's event loop, matching working Decky download plugins."""
+        progress = self._record_plugin_progress(plugin_id, phase, percent)
+        if decky:
+            await decky.emit("plugin_install_progress", plugin_id, progress["phase"], progress["percent"])
 
     def _compatibilitytools_dir(self) -> Path:
         """Use Steam's primary root first, matching the toolbox install location."""
@@ -315,112 +307,112 @@ class Plugin:
                 last_error = error
         raise ValueError("ge_proton_download_failed") from last_error
 
-    def _download_plugin_archive(self, release: dict[str, Any], plugin_id: str) -> tuple[Path, str]:
-        """Prefer the toolbox's pinned Gitee archive, then curl-based GitHub mirrors."""
-        if release.get("gitee_member"):
-            try:
-                archive = self._download_gitee_plugin_member(release, plugin_id)
-                return archive, release["gitee_sha256"]
-            except ValueError:
-                pass
-        archive = self._download_github_plugin_archive(release["url"], plugin_id, int(release["size"]))
-        return archive, release["sha256"]
+    async def _download_plugin_archive(self, release: dict[str, Any], plugin_id: str) -> Path:
+        """Download one plugin archive with a China-friendly source and resume support.
 
-    def _download_gitee_archive(self, plugin_id: str) -> Path:
-        self._set_plugin_progress(plugin_id, "plugin_download_phase", 1)
-        temporary: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(dir=self.data_root, prefix="gitee-", suffix=".zip", delete=False) as handle:
-                temporary = Path(handle.name)
-            request = urllib.request.Request(GITEE_ARCHIVE_URL, headers={"User-Agent": "DeckRecall"})
-            with urllib.request.urlopen(request, timeout=60) as response:
-                total = 0
-                with temporary.open("wb") as target:
-                    for chunk in iter(lambda: response.read(1024 * 1024), b""):
-                        total += len(chunk)
-                        if total > MAX_GITEE_ARCHIVE_SIZE:
-                            raise ValueError("plugin_install_too_large")
-                        target.write(chunk)
-                        self._set_plugin_progress(plugin_id, "plugin_download_phase", min(70, total * 70 // GITEE_ARCHIVE_SIZE))
-            if self._hash(temporary).lower() != GITEE_ARCHIVE_SHA256:
-                raise ValueError("plugin_install_checksum_failed")
-            self._set_plugin_progress(plugin_id, "plugin_download_phase", 70)
-            return temporary
-        except (urllib.error.URLError, OSError, ValueError) as error:
-            if temporary:
-                temporary.unlink(missing_ok=True)
-            if isinstance(error, ValueError) and str(error) in {"plugin_install_too_large", "plugin_install_checksum_failed"}:
-                raise
-            raise ValueError("plugin_install_download_failed") from error
-
-    def _download_gitee_plugin_member(self, release: dict[str, Any], plugin_id: str) -> Path:
-        archive_path: Path | None = None
-        member_path: Path | None = None
-        try:
-            archive_path = self._download_gitee_archive(plugin_id)
-            member = release["gitee_member"]
-            with zipfile.ZipFile(archive_path) as bundle:
-                if member not in bundle.namelist():
-                    raise ValueError("plugin_install_download_failed")
-                info = bundle.getinfo(member)
-                path = Path(member)
-                if path.is_absolute() or ".." in path.parts or info.is_dir() or info.file_size > MAX_PLUGIN_ARCHIVE_SIZE:
-                    raise ValueError("plugin_install_download_failed")
-                with tempfile.NamedTemporaryFile(dir=self.data_root, prefix=f"{plugin_id}-gitee-", suffix=".zip", delete=False) as handle:
-                    member_path = Path(handle.name)
-                with bundle.open(info) as source, member_path.open("wb") as target:
-                    shutil.copyfileobj(source, target)
-            if self._hash(member_path).lower() != release["gitee_sha256"]:
-                raise ValueError("plugin_install_checksum_failed")
-            self._set_plugin_progress(plugin_id, "plugin_download_phase", 95)
-            return member_path
-        except Exception:
-            if member_path:
-                member_path.unlink(missing_ok=True)
-            raise
-        finally:
-            if archive_path:
-                archive_path.unlink(missing_ok=True)
-
-    def _download_github_plugin_archive(self, url: str, plugin_id: str, known_size: int) -> Path:
-        """Use Python's HTTPS downloader across the toolbox mirror list."""
+        This follows the proven Decky pattern used by Moddy: blocking urllib
+        operations run in worker threads, while progress events are awaited on
+        Decky's asyncio loop. ghfast is tried first and GitHub is the sole
+        fallback, avoiding long waits on a chain of stale mirrors.
+        """
         last_error: Exception | None = None
-        self._set_plugin_progress(plugin_id, "plugin_download_phase", 1)
-        for prefix in PLUGIN_MIRROR_PREFIXES:
+        for prefix in PLUGIN_DOWNLOAD_PREFIXES:
+            candidate = release["url"] if not prefix else prefix + release["url"]
             temporary: Path | None = None
             try:
-                candidate = url if not prefix else prefix + url
-                with tempfile.NamedTemporaryFile(dir=self.data_root, prefix=f"{plugin_id}-", suffix=".zip", delete=False) as handle:
+                with tempfile.NamedTemporaryFile(
+                    dir=self.data_root, prefix=f"{plugin_id}-", suffix=".zip", delete=False
+                ) as handle:
                     temporary = Path(handle.name)
-                request = urllib.request.Request(candidate, headers={"User-Agent": "DeckRecall"})
-                with urllib.request.urlopen(request, timeout=45) as response:
-                    total = 0
-                    with temporary.open("wb") as target:
-                        for chunk in iter(lambda: response.read(1024 * 1024), b""):
-                            total += len(chunk)
-                            if total > MAX_PLUGIN_ARCHIVE_SIZE:
-                                raise ValueError("plugin_install_too_large")
-                            target.write(chunk)
-                            self._set_plugin_progress(plugin_id, "plugin_download_phase", min(95, total * 95 // known_size))
-                self._set_plugin_progress(plugin_id, "plugin_download_phase", 95)
+                await self._download_plugin_source(
+                    candidate, temporary, plugin_id, int(release["size"])
+                )
+                if (await asyncio.to_thread(self._hash, temporary)).lower() != release["sha256"]:
+                    raise ValueError("plugin_install_checksum_failed")
                 return temporary
-            except (urllib.error.URLError, OSError, ValueError) as error:
+            except ValueError as error:
+                last_error = error
                 if temporary:
                     temporary.unlink(missing_ok=True)
+                if str(error) == "plugin_install_too_large":
+                    raise
+            except (OSError, urllib.error.URLError) as error:
                 last_error = error
+                if temporary:
+                    temporary.unlink(missing_ok=True)
         raise ValueError("plugin_install_download_failed") from last_error
+
+    async def _download_plugin_source(
+        self, url: str, destination: Path, plugin_id: str, expected_size: int
+    ) -> None:
+        downloaded = 0
+        last_percent = -1
+        stalls = 0
+        last_interruption: Exception | None = None
+
+        while downloaded < expected_size:
+            progress_before = downloaded
+            headers = {"User-Agent": "DeckRecall"}
+            if downloaded:
+                headers["Range"] = f"bytes={downloaded}-"
+            request = urllib.request.Request(url, headers=headers)
+            response: Any = None
+            try:
+                response = await asyncio.to_thread(
+                    urllib.request.urlopen, request, None, PLUGIN_DOWNLOAD_STALL_TIMEOUT
+                )
+                resuming = downloaded > 0 and getattr(response, "status", 200) == 206
+                if downloaded and not resuming:
+                    downloaded = 0
+                mode = "ab" if resuming else "wb"
+                with destination.open(mode) as target:
+                    while True:
+                        chunk = await asyncio.to_thread(response.read, PLUGIN_DOWNLOAD_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        target.write(chunk)
+                        downloaded += len(chunk)
+                        if downloaded > MAX_PLUGIN_ARCHIVE_SIZE:
+                            raise ValueError("plugin_install_too_large")
+                        percent = min(95, downloaded * 95 // expected_size)
+                        if percent != last_percent:
+                            last_percent = percent
+                            await self._emit_plugin_progress(
+                                plugin_id, "plugin_download_phase", percent
+                            )
+                if downloaded >= expected_size:
+                    await self._emit_plugin_progress(plugin_id, "plugin_download_phase", 95)
+                    return
+            except ValueError:
+                raise
+            except (OSError, urllib.error.URLError, TimeoutError) as error:
+                last_interruption = error
+                if decky:
+                    decky.logger.warning(
+                        f"Plugin download interrupted at {downloaded} bytes: {error}"
+                    )
+            finally:
+                if response is not None:
+                    await asyncio.to_thread(response.close)
+
+            if downloaded > progress_before:
+                stalls = 0
+            else:
+                stalls += 1
+                if stalls >= PLUGIN_DOWNLOAD_MAX_STALLS:
+                    raise ValueError("plugin_install_download_failed") from last_interruption
+                await asyncio.sleep(min(2 ** stalls, 10))
 
     def _safe_install_plugin_archive(self, archive: Path, directory: str) -> None:
         if directory not in {"Decky LSFG-VK", "Decky-Framegen"}:
             raise ValueError("plugin_install_invalid")
-        target_root = self.user_home / "homebrew" / "plugins"
+        current_plugin_dir = getattr(decky, "DECKY_PLUGIN_DIR", None) if decky else None
+        target_root = Path(current_plugin_dir).parent if current_plugin_dir else self.user_home / "homebrew" / "plugins"
         target_root.mkdir(parents=True, exist_ok=True)
         try:
             self._chown_deck_user_directory(target_root)
         except ValueError:
             raise ValueError("plugin_install_owner_failed")
-        plugin_id = "lsfg" if directory == "Decky LSFG-VK" else "fsr4"
-        self._set_plugin_progress(plugin_id, "plugin_install_phase", 98)
         with zipfile.ZipFile(archive) as bundle:
             members = bundle.infolist()
             total = 0

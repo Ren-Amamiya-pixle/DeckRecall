@@ -1,10 +1,9 @@
 """DeckRecall virtual-memory tuning for SteamOS.
 
 The Decky backend runs with root only when plugin.json carries the ``root``
-flag. This module therefore writes system configuration directly while keeping
-the same safety rules as the Zhoukeer toolbox: only files marked as managed by
-DeckRecall are ever replaced or removed, and the system's original swap file
-is preserved on restore.
+flag. This module therefore writes system configuration directly: only files
+marked as managed by DeckRecall are ever replaced or removed, and the system's
+original swap file is preserved on restore.
 """
 from __future__ import annotations
 

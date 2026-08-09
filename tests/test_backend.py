@@ -121,31 +121,26 @@ class BackendTests(unittest.TestCase):
         self.assertTrue((final / "plugin.json").is_file())
         self.assertTrue((final / "dist/index.js").is_file())
 
-    def test_gitee_member_download_uses_toolbox_archive(self):
-        root = Path(self.temp.name)
-        plugin_zip = root / "plugin.zip"
-        source = root / "source" / "Decky LSFG-VK"
-        (source / "dist").mkdir(parents=True)
-        (source / "plugin.json").write_text('{"name":"小黄鸭"}', encoding="utf-8")
-        (source / "dist/index.js").write_text("frontend", encoding="utf-8")
-        with zipfile.ZipFile(plugin_zip, "w") as bundle:
-            for file in source.rglob("*"):
-                if file.is_file():
-                    bundle.write(file, file.relative_to(source))
-        expected = hashlib.sha256(plugin_zip.read_bytes()).hexdigest()
-        gitee_archive = root / "gitee.zip"
-        with zipfile.ZipFile(gitee_archive, "w") as bundle:
-            bundle.write(plugin_zip, "zhoukeer-toolbox-v6.0.4/dist/Decky-LSFG-VK-XiaoHuangYa-v0.12.5.zip")
-        self.plugin._download_gitee_archive = lambda plugin_id: gitee_archive  # type: ignore[method-assign]
+    def test_plugin_download_uses_ghfast_then_github(self):
+        payload = b"verified plugin archive"
+        expected = hashlib.sha256(payload).hexdigest()
+        source_url = "https://github.com/example/plugin.zip"
+        calls = []
+
+        async def fake_download(url, destination, plugin_id, expected_size):
+            calls.append(url)
+            if url.startswith("https://ghfast.top/"):
+                raise ValueError("plugin_install_download_failed")
+            destination.write_bytes(payload)
+
+        self.plugin._download_plugin_source = fake_download  # type: ignore[method-assign]
         release = {
-            "url": "https://github.com/example/plugin.zip",
-            "sha256": "0" * 64,
-            "gitee_member": "zhoukeer-toolbox-v6.0.4/dist/Decky-LSFG-VK-XiaoHuangYa-v0.12.5.zip",
-            "gitee_sha256": expected,
+            "url": source_url,
+            "sha256": expected,
             "directory": "Decky LSFG-VK",
-            "size": 12345,
+            "size": len(payload),
         }
-        archive, expected_sha = self.plugin._download_plugin_archive(release, "lsfg")
-        self.assertEqual(expected_sha, expected)
+        archive = self.run_async(self.plugin._download_plugin_archive, release, "lsfg")
+        self.assertEqual(calls, [f"https://ghfast.top/{source_url}", source_url])
         self.assertEqual(self.plugin._hash(archive), expected)
         archive.unlink(missing_ok=True)

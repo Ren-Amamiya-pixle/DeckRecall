@@ -17,6 +17,7 @@ if (api._version != API_VERSION) {
 }
 const callable = api.callable;
 const addEventListener = api.addEventListener;
+const removeEventListener = api.removeEventListener;
 const routerHook = api.routerHook;
 const toaster = api.toaster;
 const openFilePicker = api.openFilePicker;
@@ -319,9 +320,9 @@ var lsfgLauncherDescription$1 = "Adds ~/lsfg; requires Lossless Scaling (open it
 var installLsfgPlugin$1 = "Install Little Yellow Duck plugin";
 var installFsr4Plugin$1 = "Install FSR4 plugin";
 var requestingPluginInstall$1 = "Downloading and verifying plugin…";
-var pluginInstallComplete$1 = "Installed. Decky will load the plugin shortly; restart Decky if it does not appear.";
+var pluginInstallComplete$1 = "Installed. Restart Decky Loader so the new plugin can load.";
 var plugin_install_invalid$1 = "The plugin installation request is invalid.";
-var plugin_install_download_failed$1 = "Download failed or was too slow; multiple mirrors and the direct GitHub source were tried.";
+var plugin_install_download_failed$1 = "Download failed after resumable attempts through ghfast and direct GitHub.";
 var plugin_install_checksum_failed$1 = "File verification failed; nothing was installed.";
 var plugin_install_archive_invalid$1 = "The plugin archive is unsafe or invalid; nothing was installed.";
 var plugin_install_too_large$1 = "The plugin exceeds the safe size limit; it was not installed.";
@@ -632,9 +633,9 @@ var lsfgLauncherDescription = "添加 ~/lsfg；需要 Lossless Scaling（点软�
 var installLsfgPlugin = "安装小黄鸭插件";
 var installFsr4Plugin = "安装 FSR4 插件";
 var requestingPluginInstall = "正在下载并校验插件…";
-var pluginInstallComplete = "已安装。请稍候，Decky 会自动加载插件；若未出现，请重启 Decky。";
+var pluginInstallComplete = "已安装。请重启 Decky Loader，让新插件完成加载。";
 var plugin_install_invalid = "插件安装请求无效。";
-var plugin_install_download_failed = "下载失败或速度过低；已自动尝试多个镜像和 GitHub 直连。";
+var plugin_install_download_failed = "下载失败；已尝试 ghfast 加速和 GitHub 直连，并自动断点续传。";
 var plugin_install_checksum_failed = "文件校验失败，未安装任何内容。";
 var plugin_install_archive_invalid = "插件压缩包不安全或结构无效，未安装。";
 var plugin_install_too_large = "插件文件超过安全大小限制，未安装。";
@@ -1707,12 +1708,12 @@ function GameContent({ appId }) {
         }
     };
     SP_REACT.useEffect(() => {
-        const listener = (kind, phase, percent) => {
+        const listener = addEventListener("plugin_install_progress", (kind, phase, percent) => {
             if ((kind === "lsfg" || kind === "fsr4") && typeof phase === "string" && typeof percent === "number") {
                 setPluginInstallProgress({ phase, percent });
             }
-        };
-        addEventListener("plugin_install_progress", listener);
+        });
+        return () => removeEventListener("plugin_install_progress", listener);
     }, []);
     const recommendedCompatTools = compatTools.filter(isRecommendedCompatTool);
     const currentCompatTool = compatTools.find((tool) => tool.strToolName === selectedCompatTool);

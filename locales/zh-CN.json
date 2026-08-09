@@ -19,7 +19,7 @@
   "openFlingWebsite": "打开风灵月影官网", "selectTrainerFile": "选择下载的修改器 EXE 文件", "changeTrainerFile": "更换修改器文件",
   "trainerFileNotSelected": "尚未选择修改器文件", "trainerFileRequiredHint": "必须先选择 Documents 文件夹中的 .exe 或 .bat 文件，才能应用修改器启动项。",
   "lsfgLauncher": "小黄鸭／LSFG-VK", "lsfgLauncherDescription": "添加 ~/lsfg；需要 Lossless Scaling（点软件右边齿轮 → 属性 → 游戏版本及测试版 → linux-testing；随后回到 LSFG 插件点“Install LSFG”）和 decky-lsfg-vk 插件。",
-  "installLsfgPlugin": "安装小黄鸭插件", "installFsr4Plugin": "安装 FSR4 插件", "requestingPluginInstall": "正在下载并校验插件…", "pluginInstallComplete": "已安装。请稍候，Decky 会自动加载插件；若未出现，请重启 Decky。", "plugin_install_invalid": "插件安装请求无效。", "plugin_install_download_failed": "下载失败或速度过低；已自动尝试多个镜像和 GitHub 直连。", "plugin_install_checksum_failed": "文件校验失败，未安装任何内容。", "plugin_install_archive_invalid": "插件压缩包不安全或结构无效，未安装。", "plugin_install_too_large": "插件文件超过安全大小限制，未安装。", "plugin_install_owner_failed": "安装后的插件文件无法归还给 Steam Deck 用户，未安装。",
+  "installLsfgPlugin": "安装小黄鸭插件", "installFsr4Plugin": "安装 FSR4 插件", "requestingPluginInstall": "正在下载并校验插件…", "pluginInstallComplete": "已安装。请重启 Decky Loader，让新插件完成加载。", "plugin_install_invalid": "插件安装请求无效。", "plugin_install_download_failed": "下载失败；已尝试 ghfast 加速和 GitHub 直连，并自动断点续传。", "plugin_install_checksum_failed": "文件校验失败，未安装任何内容。", "plugin_install_archive_invalid": "插件压缩包不安全或结构无效，未安装。", "plugin_install_too_large": "插件文件超过安全大小限制，未安装。", "plugin_install_owner_failed": "安装后的插件文件无法归还给 Steam Deck 用户，未安装。",
   "plugin_download_phase": "正在下载", "plugin_verify_phase": "正在校验", "plugin_install_phase": "正在安装", "plugin_complete_phase": "安装完成",
   "skipLauncher": "跳过游戏启动器", "skipLauncherDescription": "添加常见参数 --skip-launcher。部分游戏不支持；若无效，请关闭此项并重新应用启动项。",
   "fsr4Launcher": "FSR4／OptiScaler", "fsr4LauncherDescription": "添加 ~/fgmod/fgmod；需要 Decky-Framegen 插件。",
