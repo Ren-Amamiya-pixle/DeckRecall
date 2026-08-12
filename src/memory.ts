@@ -17,6 +17,7 @@ export type MemoryManaged = {
 
 export type MemoryStatus = {
   steamos: boolean;
+  device: { family: "steam_deck" | "rog_ally" | "other"; name: string; supported: boolean; profile: string };
   root: boolean;
   recommended_swap_gib: number | undefined;
   swappiness: number | undefined;
@@ -56,6 +57,12 @@ export function normalizeMemoryStatus(value: unknown): MemoryStatus | undefined 
   const managed = isRecord(value.managed) ? value.managed : {};
   return {
     steamos: value.steamos === true,
+    device: isRecord(value.device) ? {
+      family: value.device.family === "steam_deck" || value.device.family === "rog_ally" ? value.device.family : "other",
+      name: typeof value.device.name === "string" ? value.device.name : "Unknown",
+      supported: value.device.supported === true,
+      profile: typeof value.device.profile === "string" ? value.device.profile : "unsupported",
+    } : { family: "other", name: "Unknown", supported: false, profile: "unsupported" },
     root: value.root === true,
     recommended_swap_gib: asNumber(value.recommended_swap_gib),
     swappiness: asNumber(value.swappiness),

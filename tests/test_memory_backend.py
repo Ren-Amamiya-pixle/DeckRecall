@@ -61,6 +61,14 @@ class EscapedUnitRunner(FakeRunner):
 
 
 class MemoryTunerTests(unittest.TestCase):
+    @staticmethod
+    def write_device(root: Path, product: str, vendor: str = "") -> Path:
+        dmi = root / "dmi"
+        dmi.mkdir()
+        (dmi / "product_name").write_text(product, encoding="utf-8")
+        (dmi / "sys_vendor").write_text(vendor, encoding="utf-8")
+        return dmi
+
     def test_recommended_swap_clamps_to_8_16_gib(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -89,10 +97,12 @@ class MemoryTunerTests(unittest.TestCase):
             os_release = root / "os-release"
             os_release.write_text('ID=steamos\nVERSION="3.6\n', encoding="utf-8")
             runner = FakeRunner()
+            dmi = self.write_device(root, "Jupiter", "Valve")
             tuner = MemoryTuner(
                 meminfo=meminfo,
                 swaps_file=swaps,
                 os_release=os_release,
+                dmi_root=dmi,
                 swap_path=root / "swapfile",
                 fallback_swap_path=root / ".deckrecall-swapfile",
                 runner=runner,
@@ -149,10 +159,12 @@ class MemoryTunerTests(unittest.TestCase):
             sysctl_config = root / "etc" / "memory.conf"
             systemd_dir = root / "etc" / "systemd"
             runner = FakeRunner()
+            dmi = self.write_device(root, "Jupiter", "Valve")
             tuner = TestTuner(
                 meminfo=meminfo,
                 swaps_file=root / "swaps",
                 os_release=os_release,
+                dmi_root=dmi,
                 swap_path=swap_path,
                 fallback_swap_path=fallback,
                 zram_config=zram_config,
@@ -203,6 +215,7 @@ class MemoryTunerTests(unittest.TestCase):
                 meminfo=meminfo,
                 swaps_file=root / "swaps",
                 os_release=os_release,
+                dmi_root=self.write_device(root, "Jupiter", "Valve"),
                 swap_path=swap_path,
                 fallback_swap_path=fallback,
                 zram_config=zram_config,
@@ -231,6 +244,7 @@ class MemoryTunerTests(unittest.TestCase):
                 meminfo=meminfo,
                 swaps_file=root / "swaps",
                 os_release=os_release,
+                dmi_root=self.write_device(root, "Jupiter", "Valve"),
                 swap_path=root / "swapfile",
                 fallback_swap_path=root / ".deckrecall-swapfile",
                 zram_config=zram_config,
@@ -241,6 +255,39 @@ class MemoryTunerTests(unittest.TestCase):
             tuner.restore()
             self.assertTrue(zram_config.exists())
             self.assertEqual(zram_config.read_text(encoding="utf-8"), "user-owned\n")
+
+    def test_rog_ally_uses_bazzite_zram_profile_without_disk_swap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "meminfo").write_text("MemTotal: 25165824 kB\n", encoding="utf-8")
+            os_release = root / "os-release"
+            os_release.write_text("ID=bazzite\n", encoding="utf-8")
+            runner = FakeRunner()
+            tuner = TestTuner(
+                meminfo=root / "meminfo", swaps_file=root / "swaps", os_release=os_release,
+                dmi_root=self.write_device(root, "ROG Ally X RC72LA", "ASUSTeK COMPUTER INC."),
+                swap_path=root / "swapfile", fallback_swap_path=root / ".deckrecall-swapfile",
+                zram_config=root / "etc/zram.conf", sysctl_config=root / "etc/memory.conf",
+                systemd_dir=root / "etc/systemd", runner=runner,
+            )
+            result = tuner.optimize()
+            self.assertEqual(result["profile"], "bazzite_ally")
+            self.assertIn("min(ram / 2, 16384)", tuner.zram_config.read_text(encoding="utf-8"))
+            self.assertIn("vm.swappiness = 180", tuner.sysctl_config.read_text(encoding="utf-8"))
+            commands = " ".join(" ".join(call) for call in runner.calls)
+            self.assertNotIn("fallocate", commands)
+
+    def test_other_device_is_reported_unsupported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "meminfo").write_text("MemTotal: 8388608 kB\n", encoding="utf-8")
+            os_release = root / "os-release"
+            os_release.write_text("ID=bazzite\n", encoding="utf-8")
+            tuner = TestTuner(meminfo=root / "meminfo", swaps_file=root / "swaps", os_release=os_release,
+                dmi_root=self.write_device(root, "Legion Go", "LENOVO"), runner=FakeRunner())
+            self.assertFalse(tuner.status()["device"]["supported"])
+            with self.assertRaisesRegex(ValueError, "memory_device_unsupported"):
+                tuner.optimize()
 
 
 if __name__ == "__main__":

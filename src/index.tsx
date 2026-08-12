@@ -37,6 +37,9 @@ type ActivityEvent = { at: string; code: string };
 type CreateResult = { ok: boolean; snapshot: Snapshot; diagnostics: Diagnostic };
 type RestoreResult = { ok: boolean; undo_id: string; diagnostics: Diagnostic };
 type GeProtonResult = { ok: boolean; version: string; source: string };
+type TrainerDownload = { url: string; title: string; directory: string };
+type TrainerSaved = { path: string; title: string; directory: string };
+type TrainerCompatVersion = "GE-Proton7-55" | "GE-Proton8-25" | "GE-Proton9-27" | "GE-Proton10-29";
 type AppDetails = { strLaunchOptions: string; strCompatToolName: string; strCompatToolDisplayName: string };
 
 const getDiagnostics = callable<[appId: string], Diagnostic>("get_diagnostics");
@@ -49,16 +52,19 @@ const getLaunchProfile = callable<[appId: string], LaunchProfile>("get_launch_pr
 const saveLaunchProfile = callable<[appId: string, profile: LaunchProfile], LaunchProfile>("save_launch_profile");
 const installLatestGeProton = callable<[], GeProtonResult>("install_latest_ge_proton");
 const openProtontricks = callable<[appId: string], { ok: boolean }>("open_protontricks");
+const prepareTrainerDownload = callable<[gameName: string], TrainerDownload>("prepare_trainer_download");
+const downloadTrainerToDocuments = callable<[gameName: string], TrainerSaved>("download_trainer_to_documents");
 const installChinesePlugin = callable<[pluginId: "lsfg" | "fsr4"], { ok: boolean; plugin: string }>("install_chinese_plugin");
+const installTrainerCompat = callable<[version: TrainerCompatVersion], { ok: boolean; version: string }>("install_trainer_compat");
 const getMemoryStatus = callable<[], MemoryStatus>("get_memory_status");
-const applyRecommendedMemory = callable<[], { ok: boolean; recommended_swap_gib: number; swap_path: string }>("apply_recommended_memory");
+const applyRecommendedMemory = callable<[], { ok: boolean; profile: string; recommended_swap_gib: number; swap_path: string }>("apply_recommended_memory");
 const restoreMemoryTuning = callable<[], { ok: boolean }>("restore_memory_tuning");
 
 
 const GAME_KEY = "deckRecall.lastGame";
 const LANGUAGE_KEY = "deckRecall.language";
 const AUTO_SNAPSHOT_KEY = "deckRecall.autoSnapshot";
-const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "memory_steamos_required", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
+const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "trainer_search_invalid", "trainer_search_failed", "trainer_not_found", "trainer_download_unavailable", "trainer_download_failed", "trainer_download_too_large", "trainer_download_invalid", "trainer_documents_unavailable", "trainer_compat_invalid", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_bundled_missing", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "memory_steamos_required", "memory_device_unsupported", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
 
 function currentSteamLanguage(): string | undefined {
   try {
@@ -351,7 +357,9 @@ function MemoryTuningPanel({ t }: { t: (key: string, values?: Record<string, str
     setFeedback("");
     try {
       const result = await withTimeout(applyRecommendedMemory(), 180000);
-      setFeedback(t("memoryOptimized", { size: String(result.recommended_swap_gib) }));
+      setFeedback(result.profile === "bazzite_ally"
+        ? t("memoryOptimizedRogAlly")
+        : t("memoryOptimized", { size: String(result.recommended_swap_gib) }));
       await refreshMemory(true);
     } catch (nextError) {
       setMemoryError(t(normalizeError(nextError)));
@@ -375,7 +383,7 @@ function MemoryTuningPanel({ t }: { t: (key: string, values?: Record<string, str
     }
   };
 
-  const ready = status?.steamos === true && status?.root === true;
+  const ready = status?.device.supported === true && status?.root === true;
   const configured = memoryTuningConfigured(status);
   return <PanelSection title={t("virtualMemory")}>
     <PanelSectionRow>
@@ -383,8 +391,11 @@ function MemoryTuningPanel({ t }: { t: (key: string, values?: Record<string, str
     </PanelSectionRow>
     {!status && !memoryError ? <PanelSectionRow>{t("memoryStatusUnknown")}</PanelSectionRow> : null}
     {status ? <>
-      {!status.steamos && <PanelSectionRow>{t("memoryNotSupported")}</PanelSectionRow>}
-      {status.steamos && !status.root && <PanelSectionRow>{t("memoryRootRequired")}</PanelSectionRow>}
+      <PanelSectionRow><div>{t("memoryDetectedDevice", { name: status.device.name })}</div></PanelSectionRow>
+      {!status.device.supported && <PanelSectionRow>{t("memoryNotSupported")}</PanelSectionRow>}
+      {status.device.supported && !status.root && <PanelSectionRow>{t("memoryRootRequired")}</PanelSectionRow>}
+      {status.device.family === "steam_deck" && <PanelSectionRow>{t("memorySteamDeckPlan")}</PanelSectionRow>}
+      {status.device.family === "rog_ally" && <PanelSectionRow>{t("memoryRogAllyPlan")}</PanelSectionRow>}
       {status.recommended_swap_gib !== undefined && <PanelSectionRow><div>{t("recommendedSwap", { size: String(status.recommended_swap_gib) })}</div></PanelSectionRow>}
       {status.swappiness !== undefined && <PanelSectionRow><div>{t("currentSwappiness", { value: String(status.swappiness) })}</div></PanelSectionRow>}
       <PanelSectionRow><div>{t("activeSwapCount", { count: String(status.swaps.length) })} · {t("zramCount", { count: String(status.zram_count) })}</div></PanelSectionRow>
@@ -426,9 +437,15 @@ function GameContent({ appId }: { appId: string }) {
   const [officialInstallerOpened, setOfficialInstallerOpened] = useState<string>();
   const [installingGe, setInstallingGe] = useState(false);
   const [geStatus, setGeStatus] = useState("");
+  const [trainerDownloadStatus, setTrainerDownloadStatus] = useState("");
+  const [downloadingTrainer, setDownloadingTrainer] = useState(false);
   const [requestingPluginInstall, setRequestingPluginInstall] = useState<"lsfg" | "fsr4">();
   const [pluginInstallStatus, setPluginInstallStatus] = useState("");
   const [pluginInstallProgress, setPluginInstallProgress] = useState<{ phase: string; percent: number }>();
+  const [showTrainerCompat, setShowTrainerCompat] = useState(false);
+  const [installingTrainerCompat, setInstallingTrainerCompat] = useState<TrainerCompatVersion>();
+  const [trainerCompatProgress, setTrainerCompatProgress] = useState<Record<string, { phase: string; percent: number }>>({});
+  const [trainerCompatStatus, setTrainerCompatStatus] = useState("");
   const [launchPreview, setLaunchPreview] = useState("");
   const [autoSnapshot, setAutoSnapshot] = useState(() => storageGet(AUTO_SNAPSHOT_KEY) !== "false");
 
@@ -636,6 +653,45 @@ function GameContent({ appId }: { appId: string }) {
     }
   };
 
+  const downloadLatestTrainer = async () => {
+    if (!game) return;
+    setDownloadingTrainer(true);
+    setTrainerDownloadStatus(t("trainerSearching"));
+    setError(undefined);
+    try {
+      const result = await withTimeout(prepareTrainerDownload(game.name), 45000);
+      const browser = (globalThis as any).SteamClient?.Browser;
+      if (typeof browser?.StartDownload !== "function") throw new Error("trainer_download_unavailable");
+      browser.StartDownload(result.url);
+      try {
+        const saved = await withTimeout(downloadTrainerToDocuments(game.name), 180000);
+        setLaunchProfile({ ...launchProfile, trainer_path: saved.path });
+        setTrainerDownloadStatus(t("trainerDownloadSaved", { title: saved.title, directory: saved.directory }));
+      } catch (fallbackError) {
+        setTrainerDownloadStatus(t("trainerDownloadStartedFallbackFailed", { title: result.title, error: t(normalizeError(fallbackError)) }));
+      }
+    } catch (nextError) {
+      const code = normalizeError(nextError);
+      setTrainerDownloadStatus(t(code));
+    } finally {
+      setDownloadingTrainer(false);
+    }
+  };
+
+  const installOneTrainerCompat = async (version: TrainerCompatVersion) => {
+    setInstallingTrainerCompat(version);
+    setTrainerCompatStatus("");
+    setTrainerCompatProgress((current) => ({ ...current, [version]: { phase: "compat_download_phase", percent: 0 } }));
+    try {
+      const result = await installTrainerCompat(version);
+      setTrainerCompatStatus(t("trainerCompatInstalled", { version: result.version }));
+    } catch (nextError) {
+      setTrainerCompatStatus(t(normalizeError(nextError)));
+    } finally {
+      setInstallingTrainerCompat(undefined);
+    }
+  };
+
   useEffect(() => {
     const listener = addEventListener<[kind: string, phase: string, percent: number]>(
       "plugin_install_progress",
@@ -646,6 +702,18 @@ function GameContent({ appId }: { appId: string }) {
       },
     );
     return () => removeEventListener("plugin_install_progress", listener);
+  }, []);
+
+  useEffect(() => {
+    const listener = addEventListener<[version: string, phase: string, percent: number]>(
+      "trainer_compat_progress",
+      (version, phase, percent) => {
+        if (typeof version === "string" && typeof phase === "string" && typeof percent === "number") {
+          setTrainerCompatProgress((current) => ({ ...current, [version]: { phase, percent } }));
+        }
+      },
+    );
+    return () => removeEventListener("trainer_compat_progress", listener);
   }, []);
 
   const recommendedCompatTools = compatTools.filter(isRecommendedCompatTool);
@@ -733,6 +801,25 @@ function GameContent({ appId }: { appId: string }) {
       </PanelSectionRow>
       {officialInstallerOpened && <PanelSectionRow><div style={{ color: "#7dd3fc", fontWeight: 600 }}>{t("officialInstallerOpened", { tool: officialInstallerOpened })}</div></PanelSectionRow>}
       <PanelSectionRow>
+        <ButtonItem layout="below" onClick={() => setShowTrainerCompat(!showTrainerCompat)}>
+          {showTrainerCompat ? t("hideTrainerCompatMenu") : t("openTrainerCompatMenu")}
+        </ButtonItem>
+      </PanelSectionRow>
+      {showTrainerCompat && (["GE-Proton7-55", "GE-Proton8-25", "GE-Proton9-27", "GE-Proton10-29"] as TrainerCompatVersion[]).map((version) => {
+        const progress = trainerCompatProgress[version];
+        return <PanelSectionRow key={version}><div style={{ width: "100%" }}>
+          <ButtonItem layout="below" disabled={!!installingTrainerCompat} onClick={() => void installOneTrainerCompat(version)}>
+            {installingTrainerCompat === version ? t("trainerCompatInstalling", { version }) : t("installTrainerCompatVersion", { version })}
+          </ButtonItem>
+          <div style={{ fontSize: "12px", opacity: 0.78, marginTop: "5px" }}>{version === "GE-Proton10-29" ? t("trainerCompatLatestHint") : t("trainerCompatOlderHint")}</div>
+          {progress && <div style={{ marginTop: "7px" }}>
+            <div style={{ marginBottom: "4px" }}>{t(progress.phase)} {progress.percent}%</div>
+            <div style={{ height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.18)", overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.max(2, progress.percent)}%`, background: "#67c1f5", transition: "width 0.25s ease" }} /></div>
+          </div>}
+        </div></PanelSectionRow>;
+      })}
+      {trainerCompatStatus && <PanelSectionRow><div style={{ color: "#7dd3fc", fontWeight: 600 }}>{trainerCompatStatus}</div></PanelSectionRow>}
+      <PanelSectionRow>
         <ButtonItem layout="below" disabled={busy || installingGe} onClick={() => void installGeProton()}>
           {installingGe ? t("geProtonInstalling") : t("installGeProton")}
         </ButtonItem>
@@ -785,9 +872,16 @@ function GameContent({ appId }: { appId: string }) {
       </PanelSectionRow>}
       {launchProfile.trainer_enabled && <PanelSectionRow>
         <ButtonItem layout="below" onClick={() => {
-          Navigation.NavigateToExternalWeb("https://flingtrainer.com/");
+          const query = game?.name ? `?s=${encodeURIComponent(game.name)}` : "";
+          Navigation.NavigateToExternalWeb(`https://flingtrainer.com/${query}`);
         }}>{t("openFlingWebsite")}</ButtonItem>
       </PanelSectionRow>}
+      {launchProfile.trainer_enabled && <PanelSectionRow>
+        <ButtonItem layout="below" disabled={busy || running || downloadingTrainer} onClick={() => void downloadLatestTrainer()}>
+          {downloadingTrainer ? t("trainerSearching") : t("downloadLatestTrainer")}
+        </ButtonItem>
+      </PanelSectionRow>}
+      {launchProfile.trainer_enabled && trainerDownloadStatus && <PanelSectionRow><div style={{ color: "#7dd3fc", fontWeight: 600, overflowWrap: "anywhere" }}>{trainerDownloadStatus}</div></PanelSectionRow>}
       <PanelSectionRow>
         <ToggleField
           label={t("lsfgLauncher")}

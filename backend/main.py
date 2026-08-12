@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import html
 import json
 import os
 import re
@@ -31,6 +32,9 @@ MAX_GE_ARCHIVE_SIZE = 1024 * 1024 * 1024
 MAX_GE_UNPACKED_SIZE = 2 * 1024 * 1024 * 1024
 MAX_PLUGIN_ARCHIVE_SIZE = 256 * 1024 * 1024
 MAX_PLUGIN_UNPACKED_SIZE = 512 * 1024 * 1024
+MAX_TRAINER_PAGE_SIZE = 4 * 1024 * 1024
+MAX_TRAINER_FILE_SIZE = 128 * 1024 * 1024
+FLING_ORIGIN = "https://flingtrainer.com"
 GE_RELEASE_API = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
 GE_FIXED_VERSION = "GE-Proton11-3"
 GE_FIXED_URL = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-3/GE-Proton11-3.tar.gz"
@@ -48,16 +52,39 @@ PLUGIN_DOWNLOAD_STALL_TIMEOUT = 30
 PLUGIN_DOWNLOAD_MAX_STALLS = 8
 CHINESE_PLUGIN_RELEASES = {
     "lsfg": {
-        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.2.8/lsfg-zh.zip",
-        "sha256": "221794b84b2835b432905c3b69ddb90989749b08a6427e651399e22480756ef2",
+        "bundled": "assets/lsfg-zh.zip",
+        "sha256": "278d0fe9bc81c2f3c68e53efa00b66bbb3cbba07f0b7fa2937cf881426f2fe56",
         "directory": "Decky LSFG-VK",
         "size": 16437127,
     },
     "fsr4": {
-        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.2.8/fsr4-zh.zip",
+        "bundled": "assets/fsr4-zh.zip",
         "sha256": "f578ea48296eb7b4a5645aeaef084f0e6368ec285b79f845183e13fb9c4d5e53",
         "directory": "Decky-Framegen",
         "size": 198763093,
+    },
+}
+
+TRAINER_COMPAT_RELEASES = {
+    "GE-Proton7-55": {
+        "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton7-55/GE-Proton7-55.tar.gz",
+        "size": 414899774,
+        "sha512": "8fa9ad9d0e1957ced72cf48a0e5234203b4abec28bd039df8f57aea71d7fe8da5e1cbef0d208d324ebc77559b0e278abf54aa7f6c15bfcb4fb1a136de0652903",
+    },
+    "GE-Proton8-25": {
+        "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton8-25/GE-Proton8-25.tar.gz",
+        "size": 428716716,
+        "sha512": "287b10bad211e471772017da801089dae2a83a1da50a584b75e3c1c25339768e5a9f25c4cd0cf7db07aa6c5887abe3e8928cae835a5b21c58c95e5fd0dd3f65e",
+    },
+    "GE-Proton9-27": {
+        "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton9-27/GE-Proton9-27.tar.gz",
+        "size": 488766224,
+        "sha512": "86a2b2962a2509104201b3532bc829d058d666bc8220417f71bd4af660b6d05781e9f684b3982339d695a5fd4babe19e97ec42a82a78311faf99fc1257280623",
+    },
+    "GE-Proton10-29": {
+        "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton10-29/GE-Proton10-29.tar.gz",
+        "size": 514575201,
+        "sha256": "29a42ff004e9e5c79e22fa9a0595490284167d4a2e7cabbe570b1f9c2f3295c0",
     },
 }
 
@@ -76,6 +103,7 @@ class Plugin:
         self.data_root = Path(os.environ.get("DECKRECALL_DATA_DIR", runtime_dir))
         self.data_root.mkdir(parents=True, exist_ok=True)
         self.plugin_download_progress: dict[str, dict[str, Any]] = {}
+        self.compat_download_progress: dict[str, dict[str, Any]] = {}
         self.memory: Any = None
 
     async def _main(self) -> None:
@@ -159,6 +187,20 @@ class Plugin:
         """Return a vetted author release without downloading an archive."""
         return self._ge_release()
 
+    async def prepare_trainer_download(self, game_name: str) -> dict[str, str]:
+        """Resolve one official FLiNG attachment for Steam's native downloader.
+
+        The frontend receives no arbitrary-path or arbitrary-origin capability:
+        searches and downloads are pinned to flingtrainer.com, while the target
+        is always the Steam browser's established Documents directory.
+        """
+        return await asyncio.to_thread(self._prepare_trainer_download, game_name)
+
+    async def download_trainer_to_documents(self, game_name: str) -> dict[str, str]:
+        """Download one vetted FLiNG executable to the fixed Documents folder."""
+        prepared = await asyncio.to_thread(self._prepare_trainer_download, game_name)
+        return await asyncio.to_thread(self._save_trainer_to_documents, prepared)
+
     async def open_protontricks(self, app_id: str) -> dict[str, Any]:
         """Open the Flatpak Protontricks GUI for one validated Steam app."""
         app_id = self._app_id(app_id)
@@ -221,13 +263,51 @@ class Plugin:
         finally:
             archive.unlink(missing_ok=True)
 
+    async def install_trainer_compat(self, version: str) -> dict[str, Any]:
+        """Install one independently selected, fixed upstream GE-Proton release."""
+        if version not in TRAINER_COMPAT_RELEASES:
+            raise ValueError("trainer_compat_invalid")
+        release = TRAINER_COMPAT_RELEASES[version]
+        await self._emit_compat_progress(version, "compat_download_phase", 0)
+        archive = await self._download_compat_archive(version, release)
+        try:
+            await self._emit_compat_progress(version, "compat_verify_phase", 96)
+            if "sha256" in release:
+                actual = await asyncio.to_thread(self._hash, archive)
+                expected = release["sha256"]
+            else:
+                actual = await asyncio.to_thread(self._hash_algorithm, archive, "sha512")
+                expected = release["sha512"]
+            if actual.lower() != expected:
+                raise ValueError("ge_proton_checksum_failed")
+            await self._emit_compat_progress(version, "compat_install_phase", 98)
+            installed = await asyncio.to_thread(
+                self._safe_extract_ge, archive, self._compatibilitytools_dir(), f"{version}.tar.gz"
+            )
+            await self._emit_compat_progress(version, "compat_complete_phase", 100)
+            self._event("0", "trainer_compat_installed", {"version": installed})
+            return {"ok": True, "version": installed}
+        finally:
+            archive.unlink(missing_ok=True)
+
+    async def get_trainer_compat_status(self) -> dict[str, Any]:
+        destination = self._compatibilitytools_dir()
+        result: dict[str, Any] = {}
+        for version in TRAINER_COMPAT_RELEASES:
+            root = destination / version
+            result[version] = {
+                "installed": all((root / name).is_file() for name in ("compatibilitytool.vdf", "proton", "toolmanifest.vdf")),
+                "progress": dict(self.compat_download_progress.get(version, {"phase": "compat_download_phase", "percent": 0})),
+            }
+        return result
+
     async def install_chinese_plugin(self, plugin_id: str) -> dict[str, Any]:
         """Install one fixed, checksummed plugin archive without arbitrary URLs."""
         if plugin_id not in CHINESE_PLUGIN_RELEASES:
             raise ValueError("plugin_install_invalid")
         release = CHINESE_PLUGIN_RELEASES[plugin_id]
-        await self._emit_plugin_progress(plugin_id, "plugin_download_phase", 0)
-        archive = await self._download_plugin_archive(release, plugin_id)
+        await self._emit_plugin_progress(plugin_id, "plugin_download_phase", 1)
+        archive = await self._plugin_archive(release, plugin_id)
         try:
             await self._emit_plugin_progress(plugin_id, "plugin_verify_phase", 96)
             actual_sha256 = await asyncio.to_thread(self._hash, archive)
@@ -240,6 +320,139 @@ class Plugin:
             return {"ok": True, "plugin": plugin_id}
         finally:
             archive.unlink(missing_ok=True)
+
+    async def _plugin_archive(self, release: dict[str, Any], plugin_id: str) -> Path:
+        bundled = release.get("bundled")
+        if isinstance(bundled, str):
+            source = Path(__file__).resolve().parent.parent / bundled
+            if not source.is_file():
+                raise ValueError("plugin_install_bundled_missing")
+            await self._emit_plugin_progress(plugin_id, "plugin_verify_phase", 40)
+            if (await asyncio.to_thread(self._hash, source)).lower() != release["sha256"]:
+                raise ValueError("plugin_install_checksum_failed")
+            descriptor, temporary_name = tempfile.mkstemp(
+                dir=self.data_root, prefix=f"{plugin_id}-", suffix=".zip"
+            )
+            os.close(descriptor)
+            temporary = Path(temporary_name)
+            try:
+                await asyncio.to_thread(shutil.copyfile, source, temporary)
+                await self._emit_plugin_progress(plugin_id, "plugin_install_phase", 90)
+                return temporary
+            except Exception:
+                temporary.unlink(missing_ok=True)
+                raise
+        return await self._download_plugin_archive(release, plugin_id)
+
+    def _prepare_trainer_download(self, game_name: str) -> dict[str, str]:
+        if not isinstance(game_name, str):
+            raise ValueError("trainer_search_invalid")
+        if any(char in game_name for char in "\x00\r\n"):
+            raise ValueError("trainer_search_invalid")
+        query = " ".join(game_name.strip().split())
+        if not query or len(query) > 256:
+            raise ValueError("trainer_search_invalid")
+        search_url = f"{FLING_ORIGIN}/?{urllib.parse.urlencode({'s': query})}"
+        search_html = self._fetch_fling_html(search_url)
+        result_match = re.search(
+            r'<a\s+href="(https://flingtrainer\.com/trainer/[^"?#]+/)"\s+rel="bookmark">([^<]+)</a>',
+            search_html,
+            flags=re.IGNORECASE,
+        )
+        if not result_match:
+            raise ValueError("trainer_not_found")
+        page_url = html.unescape(result_match.group(1))
+        page_html = self._fetch_fling_html(page_url)
+        attachment_match = re.search(
+            r'<a\s+href="(https://flingtrainer\.com/downloads/[A-Za-z0-9_-]+,,)"[^>]*'
+            r'title="([^"]+)"[^>]*class="attachment-link"',
+            page_html,
+            flags=re.IGNORECASE,
+        )
+        if not attachment_match:
+            raise ValueError("trainer_not_found")
+        download_url = html.unescape(attachment_match.group(1))
+        title = html.unescape(attachment_match.group(2)).strip()[:256]
+        self._event("0", "trainer_download_prepared", {"game": query, "title": title})
+        return {"url": download_url, "title": title, "directory": str(self.user_home / "Documents")}
+
+    def _save_trainer_to_documents(self, prepared: dict[str, str]) -> dict[str, str]:
+        url = prepared["url"]
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https" or parsed.hostname != "flingtrainer.com" or not parsed.path.startswith("/downloads/"):
+            raise ValueError("trainer_search_invalid")
+        documents = self.user_home / "Documents"
+        documents.mkdir(parents=True, exist_ok=True)
+        if documents.is_symlink() or not documents.is_dir():
+            raise ValueError("trainer_documents_unavailable")
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.0"})
+        temporary: Path | None = None
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                final = urllib.parse.urlparse(response.geturl())
+                if final.scheme != "https" or final.hostname != "flingtrainer.com":
+                    raise ValueError("trainer_search_invalid")
+                disposition = response.headers.get("Content-Disposition", "")
+                match = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^"\';]+)', disposition, re.IGNORECASE)
+                raw_name = urllib.parse.unquote(match.group(1)) if match else prepared["title"]
+                filename = Path(raw_name).name
+                filename = re.sub(r"[^A-Za-z0-9._ ()\[\]-]+", "_", filename).strip(" .")[:180]
+                if not filename.lower().endswith(".exe"):
+                    filename += ".exe"
+                target = documents / filename
+                counter = 1
+                while target.exists():
+                    target = documents / f"{Path(filename).stem} ({counter}).exe"
+                    counter += 1
+                descriptor, temporary_name = tempfile.mkstemp(prefix=".deckrecall-trainer-", dir=documents)
+                os.close(descriptor)
+                temporary = Path(temporary_name)
+                total = 0
+                with temporary.open("wb") as output:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > MAX_TRAINER_FILE_SIZE:
+                            raise ValueError("trainer_download_too_large")
+                        output.write(chunk)
+                with temporary.open("rb") as downloaded:
+                    signature = downloaded.read(2)
+                if total < 2 or signature != b"MZ":
+                    raise ValueError("trainer_download_invalid")
+                os.chmod(temporary, 0o644)
+                os.replace(temporary, target)
+                temporary = None
+                self._event("0", "trainer_downloaded", {"file": target.name})
+                return {"path": str(target), "title": prepared["title"], "directory": str(documents)}
+        except ValueError:
+            raise
+        except (OSError, urllib.error.URLError) as error:
+            raise ValueError("trainer_download_failed") from error
+        finally:
+            if temporary:
+                temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def _fetch_fling_html(url: str) -> str:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https" or parsed.hostname != "flingtrainer.com":
+            raise ValueError("trainer_search_invalid")
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.0"})
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                final = urllib.parse.urlparse(response.geturl())
+                if final.scheme != "https" or final.hostname != "flingtrainer.com":
+                    raise ValueError("trainer_search_invalid")
+                payload = response.read(MAX_TRAINER_PAGE_SIZE + 1)
+                if len(payload) > MAX_TRAINER_PAGE_SIZE:
+                    raise ValueError("trainer_search_failed")
+                return payload.decode("utf-8", errors="replace")
+        except ValueError:
+            raise
+        except (OSError, urllib.error.URLError) as error:
+            raise ValueError("trainer_search_failed") from error
 
     async def get_plugin_install_progress(self, plugin_id: str) -> dict[str, Any]:
         if plugin_id not in CHINESE_PLUGIN_RELEASES:
@@ -256,6 +469,65 @@ class Plugin:
         progress = self._record_plugin_progress(plugin_id, phase, percent)
         if decky:
             await decky.emit("plugin_install_progress", plugin_id, progress["phase"], progress["percent"])
+
+    async def _emit_compat_progress(self, version: str, phase: str, percent: int) -> None:
+        progress = {"phase": phase, "percent": max(0, min(100, int(percent)))}
+        self.compat_download_progress[version] = progress
+        if decky:
+            await decky.emit("trainer_compat_progress", version, progress["phase"], progress["percent"])
+
+    async def _download_compat_archive(self, version: str, release: dict[str, Any]) -> Path:
+        expected_size = int(release["size"])
+        last_error: Exception | None = None
+        for prefix in GE_MIRROR_PREFIXES:
+            candidate = release["url"] if not prefix else prefix + release["url"]
+            descriptor, temporary_name = tempfile.mkstemp(dir=self.data_root, prefix=f"{version}-", suffix=".tar.gz")
+            os.close(descriptor)
+            temporary = Path(temporary_name)
+            try:
+                await self._download_compat_source(candidate, temporary, version, expected_size)
+                return temporary
+            except ValueError as error:
+                last_error = error
+                temporary.unlink(missing_ok=True)
+                if str(error) == "ge_proton_download_too_large":
+                    raise
+            except (OSError, urllib.error.URLError) as error:
+                last_error = error
+                temporary.unlink(missing_ok=True)
+        raise ValueError("ge_proton_download_failed") from last_error
+
+    async def _download_compat_source(self, url: str, destination: Path, version: str, expected_size: int) -> None:
+        request = urllib.request.Request(url, headers={"User-Agent": "DeckRecall"})
+        response: Any = await asyncio.to_thread(urllib.request.urlopen, request, None, 60)
+        downloaded = 0
+        last_percent = -1
+        try:
+            with destination.open("wb") as output:
+                while True:
+                    chunk = await asyncio.to_thread(response.read, 1024 * 1024)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    downloaded += len(chunk)
+                    if downloaded > MAX_GE_ARCHIVE_SIZE:
+                        raise ValueError("ge_proton_download_too_large")
+                    percent = min(95, downloaded * 95 // expected_size)
+                    if percent != last_percent:
+                        last_percent = percent
+                        await self._emit_compat_progress(version, "compat_download_phase", percent)
+        finally:
+            await asyncio.to_thread(response.close)
+        if downloaded != expected_size:
+            raise ValueError("ge_proton_download_failed")
+
+    @staticmethod
+    def _hash_algorithm(path: Path, algorithm: str) -> str:
+        digest = hashlib.new(algorithm)
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     def _compatibilitytools_dir(self) -> Path:
         """Use Steam's primary root first, matching the toolbox install location."""

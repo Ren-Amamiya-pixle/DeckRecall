@@ -5,6 +5,7 @@ import { memoryTuningConfigured, normalizeMemoryStatus } from "../src/memory";
 test("normalizes a healthy virtual-memory status", () => {
   const status = normalizeMemoryStatus({
     steamos: true,
+    device: { family: "steam_deck", name: "Jupiter", supported: true, profile: "steam_deck" },
     root: true,
     recommended_swap_gib: 16,
     swappiness: 1,
@@ -25,6 +26,7 @@ test("rejects malformed memory status and ignores bad swap rows", () => {
   assert.equal(normalizeMemoryStatus(null), undefined);
   const status = normalizeMemoryStatus({
     steamos: false,
+    device: { family: "other", name: "Unknown", supported: false, profile: "unsupported" },
     root: false,
     swaps: [null, { name: "/dev/zram0", type: "partition" }],
     managed: {},

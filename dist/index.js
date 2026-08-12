@@ -308,21 +308,36 @@ var closeGameFirst$1 = "Close the game before changing launch options, saving, o
 var noSnapshots$1 = "No saved snapshots yet.";
 var noActivity$1 = "No activity yet.";
 var trainerLauncher$1 = "Trainer";
-var trainerLauncherDescription$1 = "Go to flingtrainer.com, search for and download the trainer, then select the downloaded EXE file. Steam's built-in browser normally saves it in Documents.";
+var trainerLauncherDescription$1 = "Browse FLiNG in Steam's built-in browser, then use Steam's native downloader to save the latest trainer to Documents.";
 var trainerPath$1 = "Trainer EXE";
-var openFlingWebsite$1 = "Open FLiNG Trainer website";
+var openFlingWebsite$1 = "Open website in Steam browser";
+var downloadLatestTrainer$1 = "Download latest trainer with Steam";
+var trainerSearching$1 = "Finding this game's trainer on the official site…";
+var trainerDownloadStarted$1 = "Steam download started: {title}. It will be saved to {directory}; select the file below when it finishes.";
+var trainerDownloadSaved$1 = "Steam download was invoked; DeckRecall also safely saved {title} to {directory} and selected it.";
+var trainerDownloadStartedFallbackFailed$1 = "Steam download started for {title}; the Documents fallback failed: {error}";
 var selectTrainerFile$1 = "Select the downloaded trainer EXE";
 var changeTrainerFile$1 = "Change trainer file";
+var trainer_search_invalid$1 = "This game name cannot be searched.";
+var trainer_search_failed$1 = "Could not reach the FLiNG website.";
+var trainer_not_found$1 = "No trainer for this game was found on the official site.";
+var trainer_download_unavailable$1 = "This Steam version does not expose the built-in download service.";
+var trainer_download_failed$1 = "The trainer download failed.";
+var trainer_download_too_large$1 = "The trainer exceeds the 128 MB safety limit.";
+var trainer_download_invalid$1 = "The download is not a valid Windows EXE and was deleted.";
+var trainer_documents_unavailable$1 = "The Documents folder cannot be written safely.";
+var trainer_compat_invalid$1 = "The selected trainer compatibility layer is not in the fixed allowlist.";
 var trainerFileNotSelected$1 = "No trainer file selected";
 var trainerFileRequiredHint$1 = "Select an .exe or .bat file from Documents before applying the trainer launch option.";
 var lsfgLauncher$1 = "Little Yellow Duck / LSFG-VK";
 var lsfgLauncherDescription$1 = "Adds ~/lsfg; requires Lossless Scaling (open its gear → Properties → Betas → linux-testing, then return to the LSFG plugin and choose “Install LSFG”) and the decky-lsfg-vk plugin.";
-var installLsfgPlugin$1 = "Install Little Yellow Duck plugin";
-var installFsr4Plugin$1 = "Install FSR4 plugin";
-var requestingPluginInstall$1 = "Downloading and verifying plugin…";
+var installLsfgPlugin$1 = "Install bundled Little Yellow Duck";
+var installFsr4Plugin$1 = "Install bundled FSR4 plugin";
+var requestingPluginInstall$1 = "Verifying and installing plugin…";
 var pluginInstallComplete$1 = "Installed. Restart Decky Loader so the new plugin can load.";
 var plugin_install_invalid$1 = "The plugin installation request is invalid.";
-var plugin_install_download_failed$1 = "Download failed after resumable attempts through ghfast and direct GitHub.";
+var plugin_install_bundled_missing$1 = "The complete DeckRecall package is missing a bundled plugin archive.";
+var plugin_install_download_failed$1 = "The plugin download failed.";
 var plugin_install_checksum_failed$1 = "File verification failed; nothing was installed.";
 var plugin_install_archive_invalid$1 = "The plugin archive is unsafe or invalid; nothing was installed.";
 var plugin_install_too_large$1 = "The plugin exceeds the safe size limit; it was not installed.";
@@ -379,6 +394,17 @@ var downloadProtonExperimental$1 = "Install / update Proton Experimental";
 var downloadProton10$1 = "Install / update Proton 10.0-4";
 var officialProtonDownloadHint$1 = "These buttons always open SteamOS's native installer. After you confirm, Steam handles the download and updates. Return to DeckRecall and select Refresh game data when finished. Only installed GE-Proton versions are shown.";
 var officialInstallerOpened$1 = "SteamOS installer opened: {tool}";
+var openTrainerCompatMenu$1 = "Install trainer compatibility layers (4 independent choices)";
+var hideTrainerCompatMenu$1 = "Hide trainer compatibility menu";
+var installTrainerCompatVersion$1 = "Install {version} independently";
+var trainerCompatInstalling$1 = "Installing {version}…";
+var trainerCompatLatestHint$1 = "For current game/trainer versions; verify per game.";
+var trainerCompatOlderHint$1 = "For older game/trainer versions.";
+var trainerCompatInstalled$1 = "Compatibility layer installed: {version}. Restart Steam, then refresh.";
+var compat_download_phase$1 = "Downloading";
+var compat_verify_phase$1 = "Verifying";
+var compat_install_phase$1 = "Installing";
+var compat_complete_phase$1 = "Installation complete";
 var installGeProton$1 = "Download and install latest GE-Proton";
 var geProtonInstalling$1 = "Downloading, verifying, and installing GE-Proton…";
 var geProtonInstallHint$1 = "Uses the GE-Proton author's GitHub Release for the latest version and SHA-256, then falls back to a fixed verified version when the API is unavailable. A configured mirror is used if the download fails, and installation into Steam's compatibilitytools.d happens only after SHA-256 verification.";
@@ -395,7 +421,10 @@ var ge_proton_owner_failed$1 = "Installed GE-Proton files could not be returned 
 var steam_root_not_found$1 = "Steam's user directory was not found. Fully start Steam once, then try again.";
 var virtualMemory$1 = "Virtual memory";
 var memoryStatusUnknown$1 = "Virtual memory status could not be read.";
-var memoryNotSupported$1 = "Virtual memory tuning is only available on SteamOS.";
+var memoryNotSupported$1 = "This device was identified, but virtual-memory changes are not supported yet.";
+var memoryDetectedDevice$1 = "Detected device: {name}";
+var memorySteamDeckPlan$1 = "Steam Deck plan: zram plus 8–16 GB disk swap, swappiness 1.";
+var memoryRogAllyPlan$1 = "ROG Ally / Ally X on Bazzite: zram only (half RAM, max 16 GB), swappiness 180; no Steam Deck disk swap.";
 var memoryRootRequired$1 = "DeckRecall is not running with root privileges; virtual memory was not changed.";
 var recommendedSwap$1 = "Recommended disk swap: {size} GB";
 var currentSwappiness$1 = "swappiness: {value}";
@@ -406,12 +435,14 @@ var memoryBatteryLow$1 = "Battery is below 20%; connect power before applying vi
 var memoryConfigured$1 = "DeckRecall virtual memory settings are in place.";
 var memoryNotConfigured$1 = "DeckRecall virtual memory settings are not in place yet.";
 var applyRecommendedMemory$2 = "Apply recommended virtual memory";
-var restoreMemoryTuning$2 = "Remove DeckRecall virtual memory settings";
+var restoreMemoryTuning$2 = "Restore system defaults";
 var memoryApplying$1 = "Applying recommended virtual memory…";
-var memoryRestoring$1 = "Removing DeckRecall virtual memory settings…";
+var memoryRestoring$1 = "Restoring system defaults…";
 var memoryOptimized$1 = "Applied: zram = half of physical RAM, {size} GB disk swap, swappiness 1. Restart to fully activate zram.";
+var memoryOptimizedRogAlly$1 = "Applied the ROG Ally / Bazzite plan: zram is half RAM (max 16 GB), swappiness 180, with no disk swap. Restart to fully activate it.";
 var memoryRestored$1 = "DeckRecall virtual memory settings removed; the system swap file was kept. Restart to fully complete the change.";
-var memory_steamos_required$1 = "Virtual memory tuning is only available on real SteamOS.";
+var memory_steamos_required$1 = "The Steam Deck plan requires SteamOS.";
+var memory_device_unsupported$1 = "This device or its current operating system is not supported for virtual-memory changes yet.";
 var memory_root_required$1 = "The Decky backend is not running as root, so virtual memory was not changed.";
 var memory_command_missing$1 = "A required system command is missing; nothing was changed.";
 var memory_backend_unavailable$1 = "The virtual-memory backend module is missing; install the complete plugin package and restart Decky.";
@@ -467,8 +498,22 @@ var enUS = {
 	trainerLauncherDescription: trainerLauncherDescription$1,
 	trainerPath: trainerPath$1,
 	openFlingWebsite: openFlingWebsite$1,
+	downloadLatestTrainer: downloadLatestTrainer$1,
+	trainerSearching: trainerSearching$1,
+	trainerDownloadStarted: trainerDownloadStarted$1,
+	trainerDownloadSaved: trainerDownloadSaved$1,
+	trainerDownloadStartedFallbackFailed: trainerDownloadStartedFallbackFailed$1,
 	selectTrainerFile: selectTrainerFile$1,
 	changeTrainerFile: changeTrainerFile$1,
+	trainer_search_invalid: trainer_search_invalid$1,
+	trainer_search_failed: trainer_search_failed$1,
+	trainer_not_found: trainer_not_found$1,
+	trainer_download_unavailable: trainer_download_unavailable$1,
+	trainer_download_failed: trainer_download_failed$1,
+	trainer_download_too_large: trainer_download_too_large$1,
+	trainer_download_invalid: trainer_download_invalid$1,
+	trainer_documents_unavailable: trainer_documents_unavailable$1,
+	trainer_compat_invalid: trainer_compat_invalid$1,
 	trainerFileNotSelected: trainerFileNotSelected$1,
 	trainerFileRequiredHint: trainerFileRequiredHint$1,
 	lsfgLauncher: lsfgLauncher$1,
@@ -478,6 +523,7 @@ var enUS = {
 	requestingPluginInstall: requestingPluginInstall$1,
 	pluginInstallComplete: pluginInstallComplete$1,
 	plugin_install_invalid: plugin_install_invalid$1,
+	plugin_install_bundled_missing: plugin_install_bundled_missing$1,
 	plugin_install_download_failed: plugin_install_download_failed$1,
 	plugin_install_checksum_failed: plugin_install_checksum_failed$1,
 	plugin_install_archive_invalid: plugin_install_archive_invalid$1,
@@ -535,6 +581,17 @@ var enUS = {
 	downloadProton10: downloadProton10$1,
 	officialProtonDownloadHint: officialProtonDownloadHint$1,
 	officialInstallerOpened: officialInstallerOpened$1,
+	openTrainerCompatMenu: openTrainerCompatMenu$1,
+	hideTrainerCompatMenu: hideTrainerCompatMenu$1,
+	installTrainerCompatVersion: installTrainerCompatVersion$1,
+	trainerCompatInstalling: trainerCompatInstalling$1,
+	trainerCompatLatestHint: trainerCompatLatestHint$1,
+	trainerCompatOlderHint: trainerCompatOlderHint$1,
+	trainerCompatInstalled: trainerCompatInstalled$1,
+	compat_download_phase: compat_download_phase$1,
+	compat_verify_phase: compat_verify_phase$1,
+	compat_install_phase: compat_install_phase$1,
+	compat_complete_phase: compat_complete_phase$1,
 	installGeProton: installGeProton$1,
 	geProtonInstalling: geProtonInstalling$1,
 	geProtonInstallHint: geProtonInstallHint$1,
@@ -552,6 +609,9 @@ var enUS = {
 	virtualMemory: virtualMemory$1,
 	memoryStatusUnknown: memoryStatusUnknown$1,
 	memoryNotSupported: memoryNotSupported$1,
+	memoryDetectedDevice: memoryDetectedDevice$1,
+	memorySteamDeckPlan: memorySteamDeckPlan$1,
+	memoryRogAllyPlan: memoryRogAllyPlan$1,
 	memoryRootRequired: memoryRootRequired$1,
 	recommendedSwap: recommendedSwap$1,
 	currentSwappiness: currentSwappiness$1,
@@ -566,8 +626,10 @@ var enUS = {
 	memoryApplying: memoryApplying$1,
 	memoryRestoring: memoryRestoring$1,
 	memoryOptimized: memoryOptimized$1,
+	memoryOptimizedRogAlly: memoryOptimizedRogAlly$1,
 	memoryRestored: memoryRestored$1,
 	memory_steamos_required: memory_steamos_required$1,
+	memory_device_unsupported: memory_device_unsupported$1,
 	memory_root_required: memory_root_required$1,
 	memory_command_missing: memory_command_missing$1,
 	memory_backend_unavailable: memory_backend_unavailable$1,
@@ -621,21 +683,36 @@ var closeGameFirst = "请先关闭游戏，再修改启动项、保存或恢复�
 var noSnapshots = "还没有保存状态快照。";
 var noActivity = "还没有活动记录。";
 var trainerLauncher = "修改器";
-var trainerLauncherDescription = "前往风灵月影官网 flingtrainer.com 搜索并下载修改器，然后选择下载的 EXE 文件（Steam 内置浏览器默认下载到 Documents 文件夹）。";
+var trainerLauncherDescription = "可在 Steam 内置浏览器查看风灵月影官网；点“用 Steam 下载最新修改器”会调用 Steam 自带下载器并保存到 Documents。";
 var trainerPath = "修改器 EXE";
-var openFlingWebsite = "打开风灵月影官网";
+var openFlingWebsite = "用 Steam 内置浏览器打开官网";
+var downloadLatestTrainer = "用 Steam 下载最新修改器";
+var trainerSearching = "正在官网查找当前游戏的修改器…";
+var trainerDownloadStarted = "Steam 下载已启动：{title}。文件将保存到 {directory}，完成后点下方选择文件。";
+var trainerDownloadSaved = "Steam 下载已调用，DeckRecall 也已安全保存 {title} 到 {directory} 并自动选中。";
+var trainerDownloadStartedFallbackFailed = "Steam 下载已启动：{title}；Documents 直存兜底失败：{error}";
 var selectTrainerFile = "选择下载的修改器 EXE 文件";
 var changeTrainerFile = "更换修改器文件";
+var trainer_search_invalid = "当前游戏名无法用于搜索。";
+var trainer_search_failed = "无法连接风灵月影官网。";
+var trainer_not_found = "官网未找到当前游戏的修改器。";
+var trainer_download_unavailable = "当前 Steam 版本没有提供内置下载接口。";
+var trainer_download_failed = "修改器下载失败。";
+var trainer_download_too_large = "修改器超过 128 MB 安全上限。";
+var trainer_download_invalid = "下载内容不是有效的 Windows EXE，已删除。";
+var trainer_documents_unavailable = "Documents 文件夹不可安全写入。";
+var trainer_compat_invalid = "所选修改器兼容层不在固定白名单中。";
 var trainerFileNotSelected = "尚未选择修改器文件";
 var trainerFileRequiredHint = "必须先选择 Documents 文件夹中的 .exe 或 .bat 文件，才能应用修改器启动项。";
 var lsfgLauncher = "小黄鸭／LSFG-VK";
 var lsfgLauncherDescription = "添加 ~/lsfg；需要 Lossless Scaling（点软件右边齿轮 → 属性 → 游戏版本及测试版 → linux-testing；随后回到 LSFG 插件点“Install LSFG”）和 decky-lsfg-vk 插件。";
-var installLsfgPlugin = "安装小黄鸭插件";
-var installFsr4Plugin = "安装 FSR4 插件";
-var requestingPluginInstall = "正在下载并校验插件…";
+var installLsfgPlugin = "离线安装小黄鸭插件";
+var installFsr4Plugin = "离线安装 FSR4 插件";
+var requestingPluginInstall = "正在校验并安装插件…";
 var pluginInstallComplete = "已安装。请重启 Decky Loader，让新插件完成加载。";
 var plugin_install_invalid = "插件安装请求无效。";
-var plugin_install_download_failed = "下载失败；已尝试 ghfast 加速和 GitHub 直连，并自动断点续传。";
+var plugin_install_bundled_missing = "DeckRecall 完整包缺少内置插件文件，请重新安装完整版。";
+var plugin_install_download_failed = "插件下载失败。";
 var plugin_install_checksum_failed = "文件校验失败，未安装任何内容。";
 var plugin_install_archive_invalid = "插件压缩包不安全或结构无效，未安装。";
 var plugin_install_too_large = "插件文件超过安全大小限制，未安装。";
@@ -692,6 +769,17 @@ var downloadProtonExperimental = "安装／更新 Proton Experimental";
 var downloadProton10 = "安装／更新 Proton 10.0-4";
 var officialProtonDownloadHint = "这两个按钮始终会调用 SteamOS 原生安装界面；确认安装后，Steam 会自行下载和更新。完成后返回 DeckRecall 并点击“刷新游戏数据”。GE-Proton 只显示已经安装的版本。";
 var officialInstallerOpened = "已打开 SteamOS 安装界面：{tool}";
+var openTrainerCompatMenu = "安装修改器所需兼容层（4 个独立安装）";
+var hideTrainerCompatMenu = "收起修改器兼容层菜单";
+var installTrainerCompatVersion = "独立安装 {version}";
+var trainerCompatInstalling = "正在安装 {version}…";
+var trainerCompatLatestHint = "适合最新游戏版本／新修改器，仍应以具体游戏测试为准。";
+var trainerCompatOlderHint = "适合旧版游戏／旧修改器。";
+var trainerCompatInstalled = "兼容层已安装：{version}；重启 Steam 后刷新列表。";
+var compat_download_phase = "正在下载";
+var compat_verify_phase = "正在校验";
+var compat_install_phase = "正在安装";
+var compat_complete_phase = "安装完成";
 var installGeProton = "下载并安装最新版 GE-Proton";
 var geProtonInstalling = "正在下载、校验并安装 GE-Proton…";
 var geProtonInstallHint = "优先从 GE-Proton 作者的 GitHub Release 获取最新版本及 SHA-256；API 不可用时回退固定已校验版本。下载失败时会使用配置的镜像回退，并且仅在 SHA-256 校验通过后安装到 Steam 的 compatibilitytools.d。";
@@ -708,7 +796,10 @@ var ge_proton_owner_failed = "已安装的 GE-Proton 文件无法归还给 Steam
 var steam_root_not_found = "未找到 Steam 用户目录；请先完整启动 Steam 一次后重试。";
 var virtualMemory = "虚拟内存";
 var memoryStatusUnknown = "无法读取虚拟内存状态。";
-var memoryNotSupported = "虚拟内存调整仅支持真实 SteamOS。";
+var memoryNotSupported = "已识别该机型，但暂不支持修改虚拟内存。";
+var memoryDetectedDevice = "检测到机型：{name}";
+var memorySteamDeckPlan = "Steam Deck 方案：zram + 8–16 GB 磁盘 swap，swappiness 1。";
+var memoryRogAllyPlan = "ROG Ally／Ally X 的 Bazzite 方案：仅配置 zram（半内存、最高 16 GB）和 swappiness 180，不创建 Steam Deck 磁盘 swap。";
 var memoryRootRequired = "DeckRecall 未以管理员权限运行，未修改虚拟内存。";
 var recommendedSwap = "推荐磁盘 swap：{size} GB";
 var currentSwappiness = "swappiness：{value}";
@@ -719,12 +810,14 @@ var memoryBatteryLow = "电量低于 20%，请连接电源后再调整虚拟内�
 var memoryConfigured = "DeckRecall 虚拟内存设置已生效。";
 var memoryNotConfigured = "尚未应用 DeckRecall 虚拟内存设置。";
 var applyRecommendedMemory$1 = "一键应用推荐虚拟内存";
-var restoreMemoryTuning$1 = "撤销 DeckRecall 虚拟内存设置";
+var restoreMemoryTuning$1 = "恢复系统默认设置";
 var memoryApplying = "正在应用推荐虚拟内存…";
-var memoryRestoring = "正在撤销 DeckRecall 虚拟内存设置…";
+var memoryRestoring = "正在恢复系统默认设置…";
 var memoryOptimized = "已应用：zram 为物理内存一半、{size} GB 磁盘 swap、swappiness 1；重启后 zram 完全生效。";
+var memoryOptimizedRogAlly = "已应用 ROG Ally／Bazzite 方案：zram 为物理内存一半（最高 16 GB）、swappiness 180，不创建磁盘 swap；重启后完全生效。";
 var memoryRestored = "已撤销 DeckRecall 虚拟内存设置，系统原 swap 已保留；重启后完全生效。";
-var memory_steamos_required = "虚拟内存调整仅支持真实 SteamOS。";
+var memory_steamos_required = "Steam Deck 方案需要 SteamOS。";
+var memory_device_unsupported = "该机型或其当前系统暂不支持修改虚拟内存。";
 var memory_root_required = "Decky 后端未以管理员权限运行，未修改虚拟内存。";
 var memory_command_missing = "缺少必要的系统命令，未修改任何内容。";
 var memory_backend_unavailable = "虚拟内存后端模块缺失；请安装完整插件包并重启 Decky。";
@@ -780,8 +873,22 @@ var zhCN = {
 	trainerLauncherDescription: trainerLauncherDescription,
 	trainerPath: trainerPath,
 	openFlingWebsite: openFlingWebsite,
+	downloadLatestTrainer: downloadLatestTrainer,
+	trainerSearching: trainerSearching,
+	trainerDownloadStarted: trainerDownloadStarted,
+	trainerDownloadSaved: trainerDownloadSaved,
+	trainerDownloadStartedFallbackFailed: trainerDownloadStartedFallbackFailed,
 	selectTrainerFile: selectTrainerFile,
 	changeTrainerFile: changeTrainerFile,
+	trainer_search_invalid: trainer_search_invalid,
+	trainer_search_failed: trainer_search_failed,
+	trainer_not_found: trainer_not_found,
+	trainer_download_unavailable: trainer_download_unavailable,
+	trainer_download_failed: trainer_download_failed,
+	trainer_download_too_large: trainer_download_too_large,
+	trainer_download_invalid: trainer_download_invalid,
+	trainer_documents_unavailable: trainer_documents_unavailable,
+	trainer_compat_invalid: trainer_compat_invalid,
 	trainerFileNotSelected: trainerFileNotSelected,
 	trainerFileRequiredHint: trainerFileRequiredHint,
 	lsfgLauncher: lsfgLauncher,
@@ -791,6 +898,7 @@ var zhCN = {
 	requestingPluginInstall: requestingPluginInstall,
 	pluginInstallComplete: pluginInstallComplete,
 	plugin_install_invalid: plugin_install_invalid,
+	plugin_install_bundled_missing: plugin_install_bundled_missing,
 	plugin_install_download_failed: plugin_install_download_failed,
 	plugin_install_checksum_failed: plugin_install_checksum_failed,
 	plugin_install_archive_invalid: plugin_install_archive_invalid,
@@ -848,6 +956,17 @@ var zhCN = {
 	downloadProton10: downloadProton10,
 	officialProtonDownloadHint: officialProtonDownloadHint,
 	officialInstallerOpened: officialInstallerOpened,
+	openTrainerCompatMenu: openTrainerCompatMenu,
+	hideTrainerCompatMenu: hideTrainerCompatMenu,
+	installTrainerCompatVersion: installTrainerCompatVersion,
+	trainerCompatInstalling: trainerCompatInstalling,
+	trainerCompatLatestHint: trainerCompatLatestHint,
+	trainerCompatOlderHint: trainerCompatOlderHint,
+	trainerCompatInstalled: trainerCompatInstalled,
+	compat_download_phase: compat_download_phase,
+	compat_verify_phase: compat_verify_phase,
+	compat_install_phase: compat_install_phase,
+	compat_complete_phase: compat_complete_phase,
 	installGeProton: installGeProton,
 	geProtonInstalling: geProtonInstalling,
 	geProtonInstallHint: geProtonInstallHint,
@@ -865,6 +984,9 @@ var zhCN = {
 	virtualMemory: virtualMemory,
 	memoryStatusUnknown: memoryStatusUnknown,
 	memoryNotSupported: memoryNotSupported,
+	memoryDetectedDevice: memoryDetectedDevice,
+	memorySteamDeckPlan: memorySteamDeckPlan,
+	memoryRogAllyPlan: memoryRogAllyPlan,
 	memoryRootRequired: memoryRootRequired,
 	recommendedSwap: recommendedSwap,
 	currentSwappiness: currentSwappiness,
@@ -879,8 +1001,10 @@ var zhCN = {
 	memoryApplying: memoryApplying,
 	memoryRestoring: memoryRestoring,
 	memoryOptimized: memoryOptimized,
+	memoryOptimizedRogAlly: memoryOptimizedRogAlly,
 	memoryRestored: memoryRestored,
 	memory_steamos_required: memory_steamos_required,
+	memory_device_unsupported: memory_device_unsupported,
 	memory_root_required: memory_root_required,
 	memory_command_missing: memory_command_missing,
 	memory_backend_unavailable: memory_backend_unavailable,
@@ -987,6 +1111,12 @@ function normalizeMemoryStatus(value) {
     const managed = isRecord$1(value.managed) ? value.managed : {};
     return {
         steamos: value.steamos === true,
+        device: isRecord$1(value.device) ? {
+            family: value.device.family === "steam_deck" || value.device.family === "rog_ally" ? value.device.family : "other",
+            name: typeof value.device.name === "string" ? value.device.name : "Unknown",
+            supported: value.device.supported === true,
+            profile: typeof value.device.profile === "string" ? value.device.profile : "unsupported",
+        } : { family: "other", name: "Unknown", supported: false, profile: "unsupported" },
         root: value.root === true,
         recommended_swap_gib: asNumber(value.recommended_swap_gib),
         swappiness: asNumber(value.swappiness),
@@ -1134,14 +1264,17 @@ const getLaunchProfile = callable("get_launch_profile");
 const saveLaunchProfile = callable("save_launch_profile");
 const installLatestGeProton = callable("install_latest_ge_proton");
 const openProtontricks = callable("open_protontricks");
+const prepareTrainerDownload = callable("prepare_trainer_download");
+const downloadTrainerToDocuments = callable("download_trainer_to_documents");
 const installChinesePlugin = callable("install_chinese_plugin");
+const installTrainerCompat = callable("install_trainer_compat");
 const getMemoryStatus = callable("get_memory_status");
 const applyRecommendedMemory = callable("apply_recommended_memory");
 const restoreMemoryTuning = callable("restore_memory_tuning");
 const GAME_KEY = "deckRecall.lastGame";
 const LANGUAGE_KEY = "deckRecall.language";
 const AUTO_SNAPSHOT_KEY = "deckRecall.autoSnapshot";
-const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "memory_steamos_required", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
+const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "trainer_search_invalid", "trainer_search_failed", "trainer_not_found", "trainer_download_unavailable", "trainer_download_failed", "trainer_download_too_large", "trainer_download_invalid", "trainer_documents_unavailable", "trainer_compat_invalid", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_bundled_missing", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "memory_steamos_required", "memory_device_unsupported", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
 function currentSteamLanguage() {
     try {
         const language = globalThis.SteamClient?.Settings?.GetCurrentLanguage?.();
@@ -1421,7 +1554,9 @@ function MemoryTuningPanel({ t }) {
         setFeedback("");
         try {
             const result = await withTimeout(applyRecommendedMemory(), 180000);
-            setFeedback(t("memoryOptimized", { size: String(result.recommended_swap_gib) }));
+            setFeedback(result.profile === "bazzite_ally"
+                ? t("memoryOptimizedRogAlly")
+                : t("memoryOptimized", { size: String(result.recommended_swap_gib) }));
             await refreshMemory(true);
         }
         catch (nextError) {
@@ -1447,9 +1582,9 @@ function MemoryTuningPanel({ t }) {
             setBusy(false);
         }
     };
-    const ready = status?.steamos === true && status?.root === true;
+    const ready = status?.device.supported === true && status?.root === true;
     const configured = memoryTuningConfigured(status);
-    return SP_JSX.jsxs(DFL.PanelSection, { title: t("virtualMemory"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshMemory(), children: t("refresh") }) }), !status && !memoryError ? SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryStatusUnknown") }) : null, status ? SP_JSX.jsxs(SP_JSX.Fragment, { children: [!status.steamos && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryNotSupported") }), status.steamos && !status.root && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryRootRequired") }), status.recommended_swap_gib !== undefined && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { children: t("recommendedSwap", { size: String(status.recommended_swap_gib) }) }) }), status.swappiness !== undefined && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { children: t("currentSwappiness", { value: String(status.swappiness) }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { children: [t("activeSwapCount", { count: String(status.swaps.length) }), " \u00B7 ", t("zramCount", { count: String(status.zram_count) })] }) }), status.space_kib !== undefined && status.required_kib !== undefined && status.space_kib < status.required_kib && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memorySpaceInsufficient") }), status.power_ok === false && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryBatteryLow") }), SP_JSX.jsx(DFL.PanelSectionRow, { children: configured ? t("memoryConfigured") : t("memoryNotConfigured") })] }) : null, SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !ready, onClick: () => void applyMemory(), children: busy ? t("memoryApplying") : t("applyRecommendedMemory") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !ready, onClick: () => void restoreMemory(), children: busy ? t("memoryRestoring") : t("restoreMemoryTuning") }) }), feedback && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: feedback }) }), memoryError && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#f5d547", fontWeight: 600 }, children: memoryError }) })] });
+    return SP_JSX.jsxs(DFL.PanelSection, { title: t("virtualMemory"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refreshMemory(), children: t("refresh") }) }), !status && !memoryError ? SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryStatusUnknown") }) : null, status ? SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { children: t("memoryDetectedDevice", { name: status.device.name }) }) }), !status.device.supported && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryNotSupported") }), status.device.supported && !status.root && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryRootRequired") }), status.device.family === "steam_deck" && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memorySteamDeckPlan") }), status.device.family === "rog_ally" && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryRogAllyPlan") }), status.recommended_swap_gib !== undefined && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { children: t("recommendedSwap", { size: String(status.recommended_swap_gib) }) }) }), status.swappiness !== undefined && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { children: t("currentSwappiness", { value: String(status.swappiness) }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { children: [t("activeSwapCount", { count: String(status.swaps.length) }), " \u00B7 ", t("zramCount", { count: String(status.zram_count) })] }) }), status.space_kib !== undefined && status.required_kib !== undefined && status.space_kib < status.required_kib && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memorySpaceInsufficient") }), status.power_ok === false && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("memoryBatteryLow") }), SP_JSX.jsx(DFL.PanelSectionRow, { children: configured ? t("memoryConfigured") : t("memoryNotConfigured") })] }) : null, SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !ready, onClick: () => void applyMemory(), children: busy ? t("memoryApplying") : t("applyRecommendedMemory") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !ready, onClick: () => void restoreMemory(), children: busy ? t("memoryRestoring") : t("restoreMemoryTuning") }) }), feedback && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: feedback }) }), memoryError && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#f5d547", fontWeight: 600 }, children: memoryError }) })] });
 }
 function GameContent({ appId }) {
     const savedLanguage = storageGet(LANGUAGE_KEY);
@@ -1474,9 +1609,15 @@ function GameContent({ appId }) {
     const [officialInstallerOpened, setOfficialInstallerOpened] = SP_REACT.useState();
     const [installingGe, setInstallingGe] = SP_REACT.useState(false);
     const [geStatus, setGeStatus] = SP_REACT.useState("");
+    const [trainerDownloadStatus, setTrainerDownloadStatus] = SP_REACT.useState("");
+    const [downloadingTrainer, setDownloadingTrainer] = SP_REACT.useState(false);
     const [requestingPluginInstall, setRequestingPluginInstall] = SP_REACT.useState();
     const [pluginInstallStatus, setPluginInstallStatus] = SP_REACT.useState("");
     const [pluginInstallProgress, setPluginInstallProgress] = SP_REACT.useState();
+    const [showTrainerCompat, setShowTrainerCompat] = SP_REACT.useState(false);
+    const [installingTrainerCompat, setInstallingTrainerCompat] = SP_REACT.useState();
+    const [trainerCompatProgress, setTrainerCompatProgress] = SP_REACT.useState({});
+    const [trainerCompatStatus, setTrainerCompatStatus] = SP_REACT.useState("");
     const [launchPreview, setLaunchPreview] = SP_REACT.useState("");
     const [autoSnapshot, setAutoSnapshot] = SP_REACT.useState(() => storageGet(AUTO_SNAPSHOT_KEY) !== "false");
     const refresh = async () => {
@@ -1707,6 +1848,50 @@ function GameContent({ appId }) {
             setRequestingPluginInstall(undefined);
         }
     };
+    const downloadLatestTrainer = async () => {
+        if (!game)
+            return;
+        setDownloadingTrainer(true);
+        setTrainerDownloadStatus(t("trainerSearching"));
+        setError(undefined);
+        try {
+            const result = await withTimeout(prepareTrainerDownload(game.name), 45000);
+            const browser = globalThis.SteamClient?.Browser;
+            if (typeof browser?.StartDownload !== "function")
+                throw new Error("trainer_download_unavailable");
+            browser.StartDownload(result.url);
+            try {
+                const saved = await withTimeout(downloadTrainerToDocuments(game.name), 180000);
+                setLaunchProfile({ ...launchProfile, trainer_path: saved.path });
+                setTrainerDownloadStatus(t("trainerDownloadSaved", { title: saved.title, directory: saved.directory }));
+            }
+            catch (fallbackError) {
+                setTrainerDownloadStatus(t("trainerDownloadStartedFallbackFailed", { title: result.title, error: t(normalizeError(fallbackError)) }));
+            }
+        }
+        catch (nextError) {
+            const code = normalizeError(nextError);
+            setTrainerDownloadStatus(t(code));
+        }
+        finally {
+            setDownloadingTrainer(false);
+        }
+    };
+    const installOneTrainerCompat = async (version) => {
+        setInstallingTrainerCompat(version);
+        setTrainerCompatStatus("");
+        setTrainerCompatProgress((current) => ({ ...current, [version]: { phase: "compat_download_phase", percent: 0 } }));
+        try {
+            const result = await installTrainerCompat(version);
+            setTrainerCompatStatus(t("trainerCompatInstalled", { version: result.version }));
+        }
+        catch (nextError) {
+            setTrainerCompatStatus(t(normalizeError(nextError)));
+        }
+        finally {
+            setInstallingTrainerCompat(undefined);
+        }
+    };
     SP_REACT.useEffect(() => {
         const listener = addEventListener("plugin_install_progress", (kind, phase, percent) => {
             if ((kind === "lsfg" || kind === "fsr4") && typeof phase === "string" && typeof percent === "number") {
@@ -1714,6 +1899,14 @@ function GameContent({ appId }) {
             }
         });
         return () => removeEventListener("plugin_install_progress", listener);
+    }, []);
+    SP_REACT.useEffect(() => {
+        const listener = addEventListener("trainer_compat_progress", (version, phase, percent) => {
+            if (typeof version === "string" && typeof phase === "string" && typeof percent === "number") {
+                setTrainerCompatProgress((current) => ({ ...current, [version]: { phase, percent } }));
+            }
+        });
+        return () => removeEventListener("trainer_compat_progress", listener);
     }, []);
     const recommendedCompatTools = compatTools.filter(isRecommendedCompatTool);
     const currentCompatTool = compatTools.find((tool) => tool.strToolName === selectedCompatTool);
@@ -1735,7 +1928,10 @@ function GameContent({ appId }) {
                             } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("autoSnapshot"), description: t("autoSnapshotDescription"), checked: autoSnapshot, disabled: busy, onChange: (enabled) => {
                                 storageSet(AUTO_SNAPSHOT_KEY, enabled ? "true" : "false");
                                 setAutoSnapshot(enabled);
-                            } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("skipLauncher"), description: t("skipLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.skip_launcher_enabled === true, onChange: (enabled) => setLaunchProfile({ ...launchProfile, skip_launcher_enabled: enabled }) }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: t("currentGame"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refresh(), children: busy ? t("refreshing") : t("refresh") }) }), !compatToolsLoaded && !busy && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("refreshRequired") }), !game ? SP_JSX.jsx(DFL.PanelSectionRow, { children: t("noGame") }) : SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { children: [game.name, SP_JSX.jsx("div", { style: { opacity: 0.7 }, children: running ? t("gameRunning") : t("gameStopped") })] }) }), running && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("closeGameFirst") })] })] }), game && SP_JSX.jsxs(DFL.PanelSection, { title: t("compatibilityTool"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("compatibilityTool"), description: t("compatibilityToolDescription"), disabled: busy || running, selectedOption: selectedCompatTool, rgOptions: compatOptions, onChange: ({ data }) => setSelectedCompatTool(typeof data === "string" ? data : "") }) }), compatToolsLoaded && recommendedCompatTools.length === 0 && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("noRecommendedCompatTools") }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => requestOfficialProtonInstall(PROTON_EXPERIMENTAL_APP_ID, t("protonExperimentalName")), children: t("downloadProtonExperimental") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => requestOfficialProtonInstall(PROTON_10_APP_ID, t("proton10Name")), children: t("downloadProton10") }) }), officialInstallerOpened && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: t("officialInstallerOpened", { tool: officialInstallerOpened }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || installingGe, onClick: () => void installGeProton(), children: installingGe ? t("geProtonInstalling") : t("installGeProton") }) }), geStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: geStatus }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void applyCompatTool(), children: t("applyCompatibilityTool") }) })] }), game && SP_JSX.jsxs(DFL.PanelSection, { title: t("launchOptions"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("trainerLauncher"), description: t("trainerLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.trainer_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, trainer_enabled: enabled }) }) }), launchProfile.trainer_enabled && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { width: "100%" }, children: [SP_JSX.jsx("div", { style: { fontWeight: 600, marginBottom: "8px" }, children: t("trainerPath") }), SP_JSX.jsx("div", { style: {
+                            } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("skipLauncher"), description: t("skipLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.skip_launcher_enabled === true, onChange: (enabled) => setLaunchProfile({ ...launchProfile, skip_launcher_enabled: enabled }) }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: t("currentGame"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => void refresh(), children: busy ? t("refreshing") : t("refresh") }) }), !compatToolsLoaded && !busy && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("refreshRequired") }), !game ? SP_JSX.jsx(DFL.PanelSectionRow, { children: t("noGame") }) : SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { children: [game.name, SP_JSX.jsx("div", { style: { opacity: 0.7 }, children: running ? t("gameRunning") : t("gameStopped") })] }) }), running && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("closeGameFirst") })] })] }), game && SP_JSX.jsxs(DFL.PanelSection, { title: t("compatibilityTool"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("compatibilityTool"), description: t("compatibilityToolDescription"), disabled: busy || running, selectedOption: selectedCompatTool, rgOptions: compatOptions, onChange: ({ data }) => setSelectedCompatTool(typeof data === "string" ? data : "") }) }), compatToolsLoaded && recommendedCompatTools.length === 0 && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("noRecommendedCompatTools") }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => requestOfficialProtonInstall(PROTON_EXPERIMENTAL_APP_ID, t("protonExperimentalName")), children: t("downloadProtonExperimental") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => requestOfficialProtonInstall(PROTON_10_APP_ID, t("proton10Name")), children: t("downloadProton10") }) }), officialInstallerOpened && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: t("officialInstallerOpened", { tool: officialInstallerOpened }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setShowTrainerCompat(!showTrainerCompat), children: showTrainerCompat ? t("hideTrainerCompatMenu") : t("openTrainerCompatMenu") }) }), showTrainerCompat && ["GE-Proton7-55", "GE-Proton8-25", "GE-Proton9-27", "GE-Proton10-29"].map((version) => {
+                        const progress = trainerCompatProgress[version];
+                        return SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { width: "100%" }, children: [SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: !!installingTrainerCompat, onClick: () => void installOneTrainerCompat(version), children: installingTrainerCompat === version ? t("trainerCompatInstalling", { version }) : t("installTrainerCompatVersion", { version }) }), SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.78, marginTop: "5px" }, children: version === "GE-Proton10-29" ? t("trainerCompatLatestHint") : t("trainerCompatOlderHint") }), progress && SP_JSX.jsxs("div", { style: { marginTop: "7px" }, children: [SP_JSX.jsxs("div", { style: { marginBottom: "4px" }, children: [t(progress.phase), " ", progress.percent, "%"] }), SP_JSX.jsx("div", { style: { height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.18)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { height: "100%", width: `${Math.max(2, progress.percent)}%`, background: "#67c1f5", transition: "width 0.25s ease" } }) })] })] }) }, version);
+                    }), trainerCompatStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: trainerCompatStatus }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || installingGe, onClick: () => void installGeProton(), children: installingGe ? t("geProtonInstalling") : t("installGeProton") }) }), geStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: geStatus }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void applyCompatTool(), children: t("applyCompatibilityTool") }) })] }), game && SP_JSX.jsxs(DFL.PanelSection, { title: t("launchOptions"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("trainerLauncher"), description: t("trainerLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.trainer_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, trainer_enabled: enabled }) }) }), launchProfile.trainer_enabled && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { width: "100%" }, children: [SP_JSX.jsx("div", { style: { fontWeight: 600, marginBottom: "8px" }, children: t("trainerPath") }), SP_JSX.jsx("div", { style: {
                                         background: "rgba(0, 0, 0, 0.25)",
                                         borderRadius: "4px",
                                         padding: "10px",
@@ -1756,8 +1952,9 @@ function GameContent({ appId }) {
                                             setError(normalizeError(nextError));
                                         }
                                     }, children: [SP_JSX.jsx(FaFolderOpen, { style: { marginRight: "8px" } }), launchProfile.trainer_path ? t("changeTrainerFile") : t("selectTrainerFile")] })] }) }), launchProfile.trainer_enabled && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => {
-                                DFL.Navigation.NavigateToExternalWeb("https://flingtrainer.com/");
-                            }, children: t("openFlingWebsite") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("lsfgLauncher"), description: t("lsfgLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.lsfg_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, lsfg_enabled: enabled }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running || !!requestingPluginInstall, onClick: () => void requestDeckyPluginInstall("lsfg"), children: requestingPluginInstall === "lsfg" ? t("requestingPluginInstall") : t("installLsfgPlugin") }) }), pluginInstallStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: pluginInstallStatus }) }), requestingPluginInstall && pluginInstallProgress && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { width: "100%" }, children: [SP_JSX.jsxs("div", { style: { marginBottom: "6px" }, children: [t(pluginInstallProgress.phase), " ", pluginInstallProgress.percent, "%"] }), SP_JSX.jsx("div", { style: { height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.18)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { height: "100%", width: `${Math.max(2, pluginInstallProgress.percent)}%`, background: "#67c1f5", transition: "width 0.25s ease" } }) })] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("fsr4Launcher"), description: t("fsr4LauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.fsr4_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, fsr4_enabled: enabled, fsr4_uninstall_enabled: enabled ? false : launchProfile.fsr4_uninstall_enabled }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running || !!requestingPluginInstall, onClick: () => void requestDeckyPluginInstall("fsr4"), children: requestingPluginInstall === "fsr4" ? t("requestingPluginInstall") : t("installFsr4Plugin") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("fsr4UninstallLauncher"), description: t("fsr4UninstallLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.fsr4_uninstall_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, fsr4_uninstall_enabled: enabled, fsr4_enabled: enabled ? false : launchProfile.fsr4_enabled }) }) }), launchProfile.fsr4_uninstall_enabled && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#f5d547", fontWeight: 600 }, children: t("fsr4UninstallWarning") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void applyLaunchProfile(), children: t("applyLaunchOptions") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void previewLaunchProfile(), children: t("previewLaunchOptions") }) }), launchPreview && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontFamily: "monospace", fontSize: "11px", overflowWrap: "anywhere" }, children: launchPreview }) }), launchProfile.managed_options && SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontFamily: "monospace", fontSize: "11px", overflowWrap: "anywhere" }, children: launchProfile.managed_options }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void restoreLaunchOptions(), children: t("restoreLaunchOptions") }) })] })] }), game && SP_JSX.jsxs(DFL.PanelSection, { title: t("snapshots"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void refreshAfter(() => createSnapshot(game.id, game.name)), children: t("save") }) }), snapshots.length === 0 && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("noSnapshots") }), snapshots[0] && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: async () => {
+                                const query = game?.name ? `?s=${encodeURIComponent(game.name)}` : "";
+                                DFL.Navigation.NavigateToExternalWeb(`https://flingtrainer.com/${query}`);
+                            }, children: t("openFlingWebsite") }) }), launchProfile.trainer_enabled && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running || downloadingTrainer, onClick: () => void downloadLatestTrainer(), children: downloadingTrainer ? t("trainerSearching") : t("downloadLatestTrainer") }) }), launchProfile.trainer_enabled && trainerDownloadStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600, overflowWrap: "anywhere" }, children: trainerDownloadStatus }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("lsfgLauncher"), description: t("lsfgLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.lsfg_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, lsfg_enabled: enabled }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running || !!requestingPluginInstall, onClick: () => void requestDeckyPluginInstall("lsfg"), children: requestingPluginInstall === "lsfg" ? t("requestingPluginInstall") : t("installLsfgPlugin") }) }), pluginInstallStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: pluginInstallStatus }) }), requestingPluginInstall && pluginInstallProgress && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { width: "100%" }, children: [SP_JSX.jsxs("div", { style: { marginBottom: "6px" }, children: [t(pluginInstallProgress.phase), " ", pluginInstallProgress.percent, "%"] }), SP_JSX.jsx("div", { style: { height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.18)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { height: "100%", width: `${Math.max(2, pluginInstallProgress.percent)}%`, background: "#67c1f5", transition: "width 0.25s ease" } }) })] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("fsr4Launcher"), description: t("fsr4LauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.fsr4_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, fsr4_enabled: enabled, fsr4_uninstall_enabled: enabled ? false : launchProfile.fsr4_uninstall_enabled }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running || !!requestingPluginInstall, onClick: () => void requestDeckyPluginInstall("fsr4"), children: requestingPluginInstall === "fsr4" ? t("requestingPluginInstall") : t("installFsr4Plugin") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: t("fsr4UninstallLauncher"), description: t("fsr4UninstallLauncherDescription"), bottomSeparator: "standard", disabled: busy || running, checked: launchProfile.fsr4_uninstall_enabled, onChange: (enabled) => setLaunchProfile({ ...launchProfile, fsr4_uninstall_enabled: enabled, fsr4_enabled: enabled ? false : launchProfile.fsr4_enabled }) }) }), launchProfile.fsr4_uninstall_enabled && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#f5d547", fontWeight: 600 }, children: t("fsr4UninstallWarning") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void applyLaunchProfile(), children: t("applyLaunchOptions") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void previewLaunchProfile(), children: t("previewLaunchOptions") }) }), launchPreview && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontFamily: "monospace", fontSize: "11px", overflowWrap: "anywhere" }, children: launchPreview }) }), launchProfile.managed_options && SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontFamily: "monospace", fontSize: "11px", overflowWrap: "anywhere" }, children: launchProfile.managed_options }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void restoreLaunchOptions(), children: t("restoreLaunchOptions") }) })] })] }), game && SP_JSX.jsxs(DFL.PanelSection, { title: t("snapshots"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: () => void refreshAfter(() => createSnapshot(game.id, game.name)), children: t("save") }) }), snapshots.length === 0 && SP_JSX.jsx(DFL.PanelSectionRow, { children: t("noSnapshots") }), snapshots[0] && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || running, onClick: async () => {
                                 const result = await refreshAfter(() => restoreSnapshot(game.id, snapshots[0].id));
                                 if (result && isRecord(result) && typeof result.undo_id === "string")
                                     setUndoId(result.undo_id);

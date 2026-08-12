@@ -144,3 +144,19 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(calls, [f"https://ghfast.top/{source_url}", source_url])
         self.assertEqual(self.plugin._hash(archive), expected)
         archive.unlink(missing_ok=True)
+
+    def test_trainer_resolver_accepts_only_official_fling_links(self):
+        pages = {
+            "search": '<a href="https://flingtrainer.com/trainer/portal-2-trainer/" rel="bookmark">Portal 2 Trainer</a>',
+            "page": '<a href="https://flingtrainer.com/downloads/AbCd1234,," title="Portal 2 Trainer.exe" class="attachment-link">Download</a>',
+        }
+        self.plugin._fetch_fling_html = lambda url: pages["search"] if "?s=" in url else pages["page"]  # type: ignore[method-assign]
+        result = self.plugin._prepare_trainer_download(" Portal   2 ")
+        self.assertEqual(result["url"], "https://flingtrainer.com/downloads/AbCd1234,,")
+        self.assertEqual(result["directory"], str(self.plugin.user_home / "Documents"))
+        with self.assertRaisesRegex(ValueError, "trainer_search_invalid"):
+            self.plugin._prepare_trainer_download("bad\nname")
+
+    def test_trainer_compat_rejects_non_allowlisted_version(self):
+        with self.assertRaisesRegex(ValueError, "trainer_compat_invalid"):
+            self.run_async(self.plugin.install_trainer_compat, "GE-Proton99-99")

@@ -1,4 +1,4 @@
-"""DeckRecall virtual-memory tuning for SteamOS.
+"""DeckRecall virtual-memory tuning for explicitly supported handhelds.
 
 The Decky backend runs with root only when plugin.json carries the ``root``
 flag. This module therefore writes system configuration directly: only files
@@ -29,9 +29,25 @@ swap-priority = 100
 fs-type = swap
 """
 
+ALLY_ZRAM_CONFIG_TEXT = """\
+# Managed by DeckRecall
+# Matches Bazzite's published zram policy for handheld PCs.
+[zram0]
+compression-algorithm = zstd
+zram-size = min(ram / 2, 16384)
+swap-priority = 100
+fs-type = swap
+"""
+
 SYSCTL_CONFIG_TEXT = """\
 # Managed by DeckRecall
 vm.swappiness = 1
+"""
+
+ALLY_SYSCTL_CONFIG_TEXT = """\
+# Managed by DeckRecall
+# Bazzite deck image default: system_files/deck/shared/usr/lib/sysctl.d/65-memory.conf
+vm.swappiness = 180
 """
 
 SWAP_UNIT_TEMPLATE = """\
@@ -59,6 +75,7 @@ class MemoryTuner:
         os_release: Path | None = None,
         sys_block_root: Path | None = None,
         power_supply_root: Path | None = None,
+        dmi_root: Path | None = None,
         swap_path: Path | None = None,
         fallback_swap_path: Path | None = None,
         zram_config: Path | None = None,
@@ -75,6 +92,7 @@ class MemoryTuner:
         self.power_supply_root = power_supply_root or Path(
             env.get("DECKRECALL_POWER_SUPPLY_ROOT", "/sys/class/power_supply")
         )
+        self.dmi_root = dmi_root or Path(env.get("DECKRECALL_DMI_ROOT", "/sys/class/dmi/id"))
         self.swap_path = swap_path or Path(env.get("DECKRECALL_MEMORY_SWAP_PATH", "/home/swapfile"))
         self.fallback_swap_path = fallback_swap_path or Path(
             env.get("DECKRECALL_MEMORY_FALLBACK_SWAP_PATH", "/home/.deckrecall-swapfile")
@@ -138,6 +156,31 @@ class MemoryTuner:
             return True
         return shutil.which("steamos-readonly") is not None
 
+    def os_id(self) -> str:
+        try:
+            text = self.os_release.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        match = re.search(r'(?m)^ID="?([^"\n]+)"?\s*$', text)
+        return match.group(1).strip().lower() if match else ""
+
+    def device(self) -> dict[str, Any]:
+        """Identify only hardware IDs corroborated by Bazzite's hw-support list."""
+        fields: dict[str, str] = {}
+        for name in ("sys_vendor", "product_name", "board_vendor", "board_name"):
+            try:
+                fields[name] = (self.dmi_root / name).read_text(encoding="utf-8").strip()
+            except OSError:
+                fields[name] = ""
+        combined = " ".join(fields.values()).casefold()
+        product = fields["product_name"] or fields["board_name"] or "Unknown"
+        if "jupiter" in combined or "galileo" in combined:
+            return {"family": "steam_deck", "name": product, "supported": True, "profile": "steam_deck"}
+        if "rog ally rc71l" in combined or "rog ally x rc72la" in combined:
+            supported_os = self.os_id() in {"bazzite", "fedora"}
+            return {"family": "rog_ally", "name": product, "supported": supported_os, "profile": "bazzite_ally"}
+        return {"family": "other", "name": product, "supported": False, "profile": "unsupported"}
+
     @staticmethod
     def is_root() -> bool:
         return os.geteuid() == 0
@@ -150,25 +193,31 @@ class MemoryTuner:
         return False
 
     def status(self) -> dict[str, Any]:
+        device = self.device()
         recommended = None
-        try:
-            recommended = self.recommended_swap_gib()
-        except ValueError:
-            pass
+        if device["family"] == "steam_deck":
+            try:
+                recommended = self.recommended_swap_gib()
+            except ValueError:
+                pass
         return {
             "steamos": self.is_steamos(),
+            "device": device,
             "root": self.is_root(),
             "recommended_swap_gib": recommended,
             "swappiness": self._current_swappiness(),
             "swaps": self._read_swaps(),
             "zram_count": self._zram_count(),
-            "space_kib": self._free_kib(self.swap_path.parent),
+            "space_kib": self._free_kib(self.swap_path.parent) if recommended else None,
             "required_kib": (recommended + self.min_free_gib) * 1048576 if recommended else None,
             "power_ok": self._power_ok(),
             "managed": self._managed_state(recommended),
         }
 
     def optimize(self) -> dict[str, Any]:
+        device = self._require_supported_device()
+        if device["profile"] == "bazzite_ally":
+            return self._optimize_rog_ally()
         self._preflight()
         target_gib = self.recommended_swap_gib()
         if self._swapfile_is_complete(self.fallback_swap_path, target_gib):
@@ -200,24 +249,51 @@ class MemoryTuner:
             self._run(["systemctl", "enable", unit_name], code="memory_swap_unit_failed")
         else:
             self._run(["systemctl", "enable", "--now", unit_name], code="memory_swap_unit_failed")
-        return {"ok": True, "recommended_swap_gib": target_gib, "swap_path": str(self.swap_path)}
+        return {"ok": True, "profile": "steam_deck", "recommended_swap_gib": target_gib, "swap_path": str(self.swap_path)}
 
-    def restore(self) -> dict[str, Any]:
-        self._require_steamos()
+    def _optimize_rog_ally(self) -> dict[str, Any]:
         self._require_root()
         self._validate_paths()
-        self._require_commands(["blkid", "swapon", "swapoff", "systemctl", "systemd-escape"])
-        main_unit = self._swap_unit_name(self.swap_path)
-        fallback_unit = self._swap_unit_name(self.fallback_swap_path)
-        self._remove_managed_fallback_swap(fallback_unit)
-        if fallback_unit != main_unit:
-            self._remove_managed_main_unit(main_unit)
+        self._require_commands(["sysctl", "systemctl"])
+        self._config_target_is_safe(self.zram_config)
+        self._config_target_is_safe(self.sysctl_config)
+        self._write_config(self.zram_config, ALLY_ZRAM_CONFIG_TEXT)
+        self._write_config(self.sysctl_config, ALLY_SYSCTL_CONFIG_TEXT)
+        self._run(["sysctl", "-w", "vm.swappiness=180"], code="memory_apply_failed")
+        self._run(["systemctl", "daemon-reload"], code="memory_apply_failed")
+        return {"ok": True, "profile": "bazzite_ally", "recommended_swap_gib": 0, "swap_path": ""}
+
+    def restore(self) -> dict[str, Any]:
+        device = self._require_supported_device()
+        self._require_root()
+        self._validate_paths()
+        self._require_commands(["systemctl", "sysctl"])
+        if device["profile"] == "steam_deck":
+            self._require_commands(["blkid", "swapon", "swapoff", "systemd-escape"])
+            main_unit = self._swap_unit_name(self.swap_path)
+            fallback_unit = self._swap_unit_name(self.fallback_swap_path)
+            self._remove_managed_fallback_swap(fallback_unit)
+            if self._swap_unit_is_managed(self.systemd_dir / main_unit, self.swap_path):
+                self._restore_steamdeck_default_swap()
+            if fallback_unit != main_unit:
+                self._remove_managed_main_unit(main_unit)
         self._remove_managed_config(self.zram_config)
         self._remove_managed_config(self.sysctl_config)
+        default_swappiness = 180 if device["profile"] == "bazzite_ally" else 100
+        self._run(["sysctl", "-w", f"vm.swappiness={default_swappiness}"], code="memory_restore_failed")
         self._run(["systemctl", "daemon-reload"], code="memory_restore_failed")
-        return {"ok": True}
+        return {"ok": True, "profile": device["profile"], "default_swappiness": default_swappiness}
+
+    def _restore_steamdeck_default_swap(self) -> None:
+        """Restore SteamOS's published 1 GiB /home/swapfile default safely."""
+        if self._swapfile_is_complete(self.swap_path, 1):
+            return
+        self._create_swapfile(1, reserve_gib=0)
 
     def _preflight(self) -> None:
+        device = self._require_supported_device()
+        if device["profile"] != "steam_deck":
+            raise ValueError("memory_device_unsupported")
         self._require_steamos()
         self._require_root()
         self._validate_paths()
@@ -235,6 +311,12 @@ class MemoryTuner:
     def _require_steamos(self) -> None:
         if not self.is_steamos():
             raise ValueError("memory_steamos_required")
+
+    def _require_supported_device(self) -> dict[str, Any]:
+        device = self.device()
+        if not device["supported"]:
+            raise ValueError("memory_device_unsupported")
+        return device
 
     def _require_root(self) -> None:
         if not self.is_root():
@@ -577,7 +659,7 @@ class MemoryTuner:
         backup.unlink(missing_ok=True)
         self.swap_path = self.fallback_swap_path
 
-    def _create_swapfile(self, target_gib: int) -> None:
+    def _create_swapfile(self, target_gib: int, *, reserve_gib: int | None = None) -> None:
         swap_dir = self.swap_path.parent
         if not swap_dir.is_dir() or swap_dir.is_symlink():
             raise ValueError("memory_swap_create_failed")
@@ -586,7 +668,8 @@ class MemoryTuner:
         if new_file.exists() or new_file.is_symlink() or backup_file.exists() or backup_file.is_symlink():
             raise ValueError("memory_swap_create_failed")
         free_kib = self._free_kib(swap_dir)
-        required_kib = (target_gib + self.min_free_gib) * 1048576
+        reserve = self.min_free_gib if reserve_gib is None else reserve_gib
+        required_kib = (target_gib + reserve) * 1048576
         if free_kib is None or free_kib < required_kib:
             raise ValueError("memory_space_insufficient")
 
