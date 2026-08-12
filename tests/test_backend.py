@@ -6,6 +6,7 @@ import tarfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from backend.main import Plugin
 
@@ -23,6 +24,7 @@ class BackendTests(unittest.TestCase):
 
     def tearDown(self):
         os.environ.pop("DECKRECALL_USER_HOME", None)
+        os.environ.pop("DECKRECALL_PLUGIN_DIR", None)
         self.temp.cleanup()
     def run_async(self, method, *args): return asyncio.run(method(*args))
 
@@ -160,3 +162,75 @@ class BackendTests(unittest.TestCase):
     def test_trainer_compat_rejects_non_allowlisted_version(self):
         with self.assertRaisesRegex(ValueError, "trainer_compat_invalid"):
             self.run_async(self.plugin.install_trainer_compat, "GE-Proton99-99")
+
+    def test_update_status_reads_installed_package_not_source_version(self):
+        installed = Path(self.temp.name) / "plugins/DeckRecall"
+        installed.mkdir(parents=True)
+        (installed / "package.json").write_text('{"version":"0.2.8"}', encoding="utf-8")
+        self.plugin.plugin_dir = installed
+        self.plugin._deckrecall_release = lambda: {  # type: ignore[method-assign]
+            "version": "0.3.0", "tag": "v0.3.0", "url": "https://example.invalid",
+            "sha256": "0" * 64, "size": 1,
+        }
+        status = self.plugin._deckrecall_update_status()
+        self.assertEqual(status["installed_version"], "0.2.8")
+        self.assertEqual(status["latest_version"], "0.3.0")
+        self.assertTrue(status["update_available"])
+
+    def test_update_status_uses_semantic_not_decimal_comparison(self):
+        installed = Path(self.temp.name) / "plugins/DeckRecall"
+        installed.mkdir(parents=True)
+        (installed / "package.json").write_text('{"version":"0.10.0"}', encoding="utf-8")
+        self.plugin.plugin_dir = installed
+        self.plugin._deckrecall_release = lambda: {  # type: ignore[method-assign]
+            "version": "0.9.0", "tag": "v0.9.0", "url": "https://example.invalid",
+            "sha256": "0" * 64, "size": 1,
+        }
+        self.assertFalse(self.plugin._deckrecall_update_status()["update_available"])
+
+    def test_self_update_archive_replaces_atomically_and_keeps_offline_assets(self):
+        plugin_root = Path(self.temp.name) / "plugins"
+        installed = plugin_root / "DeckRecall"
+        (installed / "assets").mkdir(parents=True)
+        (installed / "package.json").write_text('{"version":"0.2.8"}', encoding="utf-8")
+        (installed / "assets/lsfg-zh.zip").write_bytes(b"offline-lsfg")
+        (installed / "assets/fsr4-zh.zip").write_bytes(b"offline-fsr4")
+        self.plugin.plugin_dir = installed
+        archive = Path(self.temp.name) / "DeckRecall.zip"
+        files = {
+            "DeckRecall/plugin.json": b'{"name":"DeckRecall"}',
+            "DeckRecall/package.json": b'{"version":"0.3.1"}',
+            "DeckRecall/main.py": b"entry",
+            "DeckRecall/backend/main.py": b"backend",
+            "DeckRecall/dist/index.js": b"frontend",
+        }
+        with zipfile.ZipFile(archive, "w") as bundle:
+            for name, payload in files.items():
+                bundle.writestr(name, payload)
+        expected_hashes = {
+            "lsfg-zh.zip": "278d0fe9bc81c2f3c68e53efa00b66bbb3cbba07f0b7fa2937cf881426f2fe56",
+            "fsr4-zh.zip": "f578ea48296eb7b4a5645aeaef084f0e6368ec285b79f845183e13fb9c4d5e53",
+        }
+        with mock.patch("os.geteuid", return_value=1000), mock.patch.object(
+            self.plugin, "_hash", side_effect=lambda path: expected_hashes[path.name]
+        ):
+            self.plugin._safe_install_deckrecall_archive(archive, "0.3.1")
+        self.assertEqual((installed / "package.json").read_text(), '{"version":"0.3.1"}')
+        self.assertEqual((installed / "assets/lsfg-zh.zip").read_bytes(), b"offline-lsfg")
+        self.assertEqual((installed / "assets/fsr4-zh.zip").read_bytes(), b"offline-fsr4")
+
+    def test_self_update_rejects_release_package_version_mismatch(self):
+        installed = Path(self.temp.name) / "plugins/DeckRecall"
+        installed.mkdir(parents=True)
+        (installed / "package.json").write_text('{"version":"0.2.8"}', encoding="utf-8")
+        self.plugin.plugin_dir = installed
+        archive = Path(self.temp.name) / "DeckRecall.zip"
+        with zipfile.ZipFile(archive, "w") as bundle:
+            bundle.writestr("DeckRecall/plugin.json", '{}')
+            bundle.writestr("DeckRecall/package.json", '{"version":"9.9.9"}')
+            bundle.writestr("DeckRecall/main.py", "entry")
+            bundle.writestr("DeckRecall/backend/main.py", "backend")
+            bundle.writestr("DeckRecall/dist/index.js", "frontend")
+        with self.assertRaisesRegex(ValueError, "self_update_version_mismatch"):
+            self.plugin._safe_install_deckrecall_archive(archive, "0.3.1")
+        self.assertEqual((installed / "package.json").read_text(), '{"version":"0.2.8"}')

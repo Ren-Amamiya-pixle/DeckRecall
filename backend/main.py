@@ -50,15 +50,20 @@ PLUGIN_DOWNLOAD_PREFIXES = ("https://ghfast.top/", "")
 PLUGIN_DOWNLOAD_CHUNK_SIZE = 64 * 1024
 PLUGIN_DOWNLOAD_STALL_TIMEOUT = 30
 PLUGIN_DOWNLOAD_MAX_STALLS = 8
+DECKRECALL_RELEASE_API = "https://api.github.com/repos/Ren-Amamiya-pixle/DeckRecall/releases/latest"
+DECKRECALL_RELEASE_ASSET = "DeckRecall.zip"
+DECKRECALL_RELEASE_ORIGIN = "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/"
 CHINESE_PLUGIN_RELEASES = {
     "lsfg": {
         "bundled": "assets/lsfg-zh.zip",
+        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.3.1/lsfg-zh.zip",
         "sha256": "278d0fe9bc81c2f3c68e53efa00b66bbb3cbba07f0b7fa2937cf881426f2fe56",
         "directory": "Decky LSFG-VK",
         "size": 16437127,
     },
     "fsr4": {
         "bundled": "assets/fsr4-zh.zip",
+        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.3.1/fsr4-zh.zip",
         "sha256": "f578ea48296eb7b4a5645aeaef084f0e6368ec285b79f845183e13fb9c4d5e53",
         "directory": "Decky-Framegen",
         "size": 198763093,
@@ -101,9 +106,12 @@ class Plugin:
         self.user_home = Path(user_home)
         self.steam_root = Path(os.environ.get("DECKRECALL_STEAM_ROOT", str(self.user_home / ".local/share/Steam")))
         self.data_root = Path(os.environ.get("DECKRECALL_DATA_DIR", runtime_dir))
+        installed_dir = os.environ.get("DECKRECALL_PLUGIN_DIR")
+        self.plugin_dir = Path(installed_dir) if installed_dir else Path(__file__).resolve().parent.parent
         self.data_root.mkdir(parents=True, exist_ok=True)
         self.plugin_download_progress: dict[str, dict[str, Any]] = {}
         self.compat_download_progress: dict[str, dict[str, Any]] = {}
+        self.self_update_progress: dict[str, Any] = {"phase": "self_update_download_phase", "percent": 0}
         self.memory: Any = None
 
     async def _main(self) -> None:
@@ -186,6 +194,39 @@ class Plugin:
     async def get_ge_proton_release(self) -> dict[str, Any]:
         """Return a vetted author release without downloading an archive."""
         return self._ge_release()
+
+    async def get_deckrecall_update_status(self) -> dict[str, Any]:
+        """Compare the package installed on this Deck with the latest final release."""
+        return await asyncio.to_thread(self._deckrecall_update_status)
+
+    async def install_deckrecall_update(self) -> dict[str, Any]:
+        """Download, verify and atomically replace this installed DeckRecall package."""
+        status = await asyncio.to_thread(self._deckrecall_update_status)
+        if not status["update_available"]:
+            return {"ok": True, "updated": False, **status}
+        release = status["release"]
+        await self._emit_self_update_progress("self_update_download_phase", 1)
+        archive = await self._download_deckrecall_update_archive(release)
+        try:
+            await self._emit_self_update_progress("self_update_verify_phase", 96)
+            actual = await asyncio.to_thread(self._hash, archive)
+            if actual.lower() != release["sha256"]:
+                raise ValueError("self_update_checksum_failed")
+            await self._emit_self_update_progress("self_update_install_phase", 98)
+            await asyncio.to_thread(
+                self._safe_install_deckrecall_archive, archive, release["version"]
+            )
+            await self._emit_self_update_progress("self_update_complete_phase", 100)
+            self._event("0", "deckrecall_updated", {"version": release["version"]})
+            return {
+                "ok": True,
+                "updated": True,
+                "installed_version": status["installed_version"],
+                "latest_version": release["version"],
+                "restart_required": True,
+            }
+        finally:
+            archive.unlink(missing_ok=True)
 
     async def prepare_trainer_download(self, game_name: str) -> dict[str, str]:
         """Resolve one official FLiNG attachment for Steam's native downloader.
@@ -326,6 +367,8 @@ class Plugin:
         if isinstance(bundled, str):
             source = Path(__file__).resolve().parent.parent / bundled
             if not source.is_file():
+                if isinstance(release.get("url"), str):
+                    return await self._download_plugin_archive(release, plugin_id)
                 raise ValueError("plugin_install_bundled_missing")
             await self._emit_plugin_progress(plugin_id, "plugin_verify_phase", 40)
             if (await asyncio.to_thread(self._hash, source)).lower() != release["sha256"]:
@@ -385,7 +428,7 @@ class Plugin:
         documents.mkdir(parents=True, exist_ok=True)
         if documents.is_symlink() or not documents.is_dir():
             raise ValueError("trainer_documents_unavailable")
-        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.0"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.1"})
         temporary: Path | None = None
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
@@ -439,7 +482,7 @@ class Plugin:
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme != "https" or parsed.hostname != "flingtrainer.com":
             raise ValueError("trainer_search_invalid")
-        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.0"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.1"})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 final = urllib.parse.urlparse(response.geturl())
@@ -475,6 +518,228 @@ class Plugin:
         self.compat_download_progress[version] = progress
         if decky:
             await decky.emit("trainer_compat_progress", version, progress["phase"], progress["percent"])
+
+    async def _emit_self_update_progress(self, phase: str, percent: int) -> None:
+        progress = {"phase": phase, "percent": max(0, min(100, int(percent)))}
+        self.self_update_progress = progress
+        if decky:
+            await decky.emit("deckrecall_update_progress", progress["phase"], progress["percent"])
+
+    @staticmethod
+    def _semantic_version(value: str, error_code: str) -> tuple[int, int, int]:
+        match = re.fullmatch(r"v?([0-9]+)[.]([0-9]+)[.]([0-9]+)", value)
+        if not match:
+            raise ValueError(error_code)
+        return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
+
+    def _installed_deckrecall_version(self) -> str:
+        manifest = self.plugin_dir / "package.json"
+        try:
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            version = payload.get("version") if isinstance(payload, dict) else None
+            if not isinstance(version, str):
+                raise ValueError()
+            self._semantic_version(version, "self_update_installed_version_invalid")
+            return version
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            if isinstance(error, ValueError) and str(error) == "self_update_installed_version_invalid":
+                raise
+            raise ValueError("self_update_installed_version_invalid") from error
+
+    def _deckrecall_release(self) -> dict[str, Any]:
+        request = urllib.request.Request(
+            DECKRECALL_RELEASE_API,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "DeckRecall"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read(2 * 1024 * 1024).decode("utf-8"))
+            if not isinstance(payload, dict) or payload.get("draft") is True or payload.get("prerelease") is True:
+                raise ValueError()
+            tag = payload.get("tag_name")
+            if not isinstance(tag, str):
+                raise ValueError()
+            self._semantic_version(tag, "self_update_release_invalid")
+            assets = payload.get("assets")
+            if not isinstance(assets, list):
+                raise ValueError()
+            asset = next(
+                (item for item in assets if isinstance(item, dict) and item.get("name") == DECKRECALL_RELEASE_ASSET),
+                None,
+            )
+            if not isinstance(asset, dict):
+                raise ValueError()
+            url, digest, size = asset.get("browser_download_url"), asset.get("digest"), asset.get("size")
+            if not isinstance(url, str) or not url.startswith(DECKRECALL_RELEASE_ORIGIN):
+                raise ValueError()
+            expected_url = f"{DECKRECALL_RELEASE_ORIGIN}{tag}/{DECKRECALL_RELEASE_ASSET}"
+            if url != expected_url or not isinstance(digest, str) or not isinstance(size, int):
+                raise ValueError()
+            match = re.fullmatch(r"sha256:([0-9a-fA-F]{64})", digest)
+            if not match or size < 1 or size > MAX_PLUGIN_ARCHIVE_SIZE:
+                raise ValueError()
+            return {
+                "version": tag.removeprefix("v"),
+                "tag": tag,
+                "url": url,
+                "sha256": match.group(1).lower(),
+                "size": size,
+            }
+        except (OSError, urllib.error.URLError, json.JSONDecodeError, ValueError) as error:
+            if isinstance(error, ValueError) and str(error) == "self_update_release_invalid":
+                raise
+            raise ValueError("self_update_release_unavailable") from error
+
+    def _deckrecall_update_status(self) -> dict[str, Any]:
+        installed = self._installed_deckrecall_version()
+        release = self._deckrecall_release()
+        available = self._semantic_version(
+            release["version"], "self_update_release_invalid"
+        ) > self._semantic_version(installed, "self_update_installed_version_invalid")
+        return {
+            "installed_version": installed,
+            "latest_version": release["version"],
+            "update_available": available,
+            "release": release,
+        }
+
+    async def _download_deckrecall_update_archive(self, release: dict[str, Any]) -> Path:
+        last_error: Exception | None = None
+        for prefix in PLUGIN_DOWNLOAD_PREFIXES:
+            candidate = release["url"] if not prefix else prefix + release["url"]
+            descriptor, temporary_name = tempfile.mkstemp(
+                dir=self.data_root, prefix="deckrecall-update-", suffix=".zip"
+            )
+            os.close(descriptor)
+            temporary = Path(temporary_name)
+            try:
+                await self._download_self_update_source(candidate, temporary, int(release["size"]))
+                return temporary
+            except ValueError as error:
+                last_error = error
+                temporary.unlink(missing_ok=True)
+                if str(error) == "self_update_too_large":
+                    raise
+            except (OSError, urllib.error.URLError) as error:
+                last_error = error
+                temporary.unlink(missing_ok=True)
+        raise ValueError("self_update_download_failed") from last_error
+
+    async def _download_self_update_source(self, url: str, destination: Path, expected_size: int) -> None:
+        downloaded = 0
+        stalls = 0
+        last_percent = -1
+        last_error: Exception | None = None
+        while downloaded < expected_size:
+            progress_before = downloaded
+            headers = {"User-Agent": "DeckRecall"}
+            if downloaded:
+                headers["Range"] = f"bytes={downloaded}-"
+            response: Any = None
+            try:
+                response = await asyncio.to_thread(
+                    urllib.request.urlopen,
+                    urllib.request.Request(url, headers=headers),
+                    None,
+                    PLUGIN_DOWNLOAD_STALL_TIMEOUT,
+                )
+                resuming = downloaded > 0 and getattr(response, "status", 200) == 206
+                if downloaded and not resuming:
+                    downloaded = 0
+                with destination.open("ab" if resuming else "wb") as output:
+                    while True:
+                        chunk = await asyncio.to_thread(response.read, PLUGIN_DOWNLOAD_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+                        downloaded += len(chunk)
+                        if downloaded > MAX_PLUGIN_ARCHIVE_SIZE:
+                            raise ValueError("self_update_too_large")
+                        percent = min(95, downloaded * 95 // expected_size)
+                        if percent != last_percent:
+                            last_percent = percent
+                            await self._emit_self_update_progress("self_update_download_phase", percent)
+                if downloaded == expected_size:
+                    return
+                if downloaded > expected_size:
+                    raise ValueError("self_update_download_failed")
+            except ValueError:
+                raise
+            except (OSError, urllib.error.URLError, TimeoutError) as error:
+                last_error = error
+            finally:
+                if response is not None:
+                    await asyncio.to_thread(response.close)
+            if downloaded > progress_before:
+                stalls = 0
+            else:
+                stalls += 1
+                if stalls >= PLUGIN_DOWNLOAD_MAX_STALLS:
+                    raise ValueError("self_update_download_failed") from last_error
+                await asyncio.sleep(min(2 ** stalls, 10))
+
+    def _safe_install_deckrecall_archive(self, archive: Path, expected_version: str) -> None:
+        target = self.plugin_dir
+        if target.name != "DeckRecall" or target.is_symlink() or not target.is_dir():
+            raise ValueError("self_update_target_invalid")
+        target_root = target.parent
+        with zipfile.ZipFile(archive) as bundle:
+            members = bundle.infolist()
+            total = 0
+            for member in members:
+                path = Path(member.filename)
+                if path.is_absolute() or ".." in path.parts or not member.filename.startswith("DeckRecall/"):
+                    raise ValueError("self_update_archive_invalid")
+                if (member.external_attr >> 16) & 0o170000 == 0o120000:
+                    raise ValueError("self_update_archive_invalid")
+                total += member.file_size
+                if total > MAX_PLUGIN_UNPACKED_SIZE:
+                    raise ValueError("self_update_too_large")
+            required = {
+                "DeckRecall/plugin.json", "DeckRecall/package.json", "DeckRecall/main.py",
+                "DeckRecall/backend/main.py", "DeckRecall/dist/index.js",
+            }
+            if not required.issubset({member.filename.rstrip("/") for member in members}):
+                raise ValueError("self_update_archive_invalid")
+            staging = Path(tempfile.mkdtemp(prefix=".DeckRecall.update-", dir=target_root))
+            backup = target_root / f".DeckRecall.previous-{os.urandom(3).hex()}"
+            try:
+                bundle.extractall(staging)
+                extracted = staging / "DeckRecall"
+                try:
+                    package = json.loads((extracted / "package.json").read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as error:
+                    raise ValueError("self_update_archive_invalid") from error
+                if not isinstance(package, dict) or package.get("version") != expected_version:
+                    raise ValueError("self_update_version_mismatch")
+                for asset_name, release in CHINESE_PLUGIN_RELEASES.items():
+                    bundled = release.get("bundled")
+                    if not isinstance(bundled, str):
+                        continue
+                    old_asset = target / bundled
+                    new_asset = extracted / bundled
+                    if new_asset.exists() or not old_asset.is_file():
+                        continue
+                    if self._hash(old_asset).lower() != release["sha256"]:
+                        continue
+                    new_asset.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(old_asset, new_asset)
+                os.replace(target, backup)
+                try:
+                    os.replace(extracted, target)
+                    self._chown_to_deck_user(target)
+                except Exception:
+                    shutil.rmtree(target, ignore_errors=True)
+                    if backup.exists():
+                        os.replace(backup, target)
+                    raise
+                shutil.rmtree(backup, ignore_errors=True)
+            except ValueError:
+                raise
+            except OSError as error:
+                raise ValueError("self_update_install_failed") from error
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
 
     async def _download_compat_archive(self, version: str, release: dict[str, Any]) -> Path:
         expected_size = int(release["size"])

@@ -1,5 +1,8 @@
 {
   "title": "DeckRecall", "noGame": "未检测到正在运行的 Steam 游戏。", "normal": "未发现变化。",
+  "deckrecallUpdateTitle": "DeckRecall 更新", "deckrecallCheckUpdate": "检测更新", "deckrecallCheckingUpdate": "正在读取已安装版本和正式 Release…", "deckrecallInstallUpdate": "在插件内更新到 {version}", "deckrecallUpdating": "正在下载、校验并安全更新…", "deckrecallUpdateAvailable": "已安装 {installed}；最新正式版 {latest}。", "deckrecallUpToDate": "已是最新正式版 {latest}。", "deckrecallUpdated": "已更新到 {latest}。请重启 Decky Loader。", "deckrecall_updated": "DeckRecall 已安全更新。",
+  "self_update_download_phase": "正在下载 DeckRecall", "self_update_verify_phase": "正在校验 DeckRecall", "self_update_install_phase": "正在安装 DeckRecall", "self_update_complete_phase": "DeckRecall 更新完成",
+  "self_update_installed_version_invalid": "无法读取当前安装包的版本。", "self_update_release_unavailable": "无法连接 DeckRecall 官方 Release。", "self_update_release_invalid": "官方 Release 元数据无效。", "self_update_download_failed": "DeckRecall 更新包下载失败。", "self_update_checksum_failed": "更新包 SHA-256 校验失败，未修改现有插件。", "self_update_archive_invalid": "更新包结构不安全或不完整。", "self_update_version_mismatch": "更新包内版本与 Release 标签不一致。", "self_update_target_invalid": "当前 DeckRecall 安装目录不安全，已停止更新。", "self_update_too_large": "DeckRecall 更新包超过安全大小限制。", "self_update_install_failed": "DeckRecall 更新安装失败，旧版本已保留。",
   "changesDetected": "检测到变化", "save": "保存正常运行状态", "restore": "安全恢复",
   "restoreLatestHealthyState": "回归上一个正常运行状态", "restoreOlderSnapshot": "恢复较早的正常状态",
   "undo": "撤销恢复", "snapshots": "状态快照", "diagnostics": "诊断结果", "logs": "活动日志",

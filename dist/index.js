@@ -272,6 +272,29 @@ function installGameContextMenuPatch() {
 var title$1 = "DeckRecall";
 var noGame$1 = "No running Steam game detected.";
 var normal$1 = "No changes detected.";
+var deckrecallUpdateTitle$1 = "DeckRecall update";
+var deckrecallCheckUpdate$1 = "Check for updates";
+var deckrecallCheckingUpdate$1 = "Reading the installed version and final Release…";
+var deckrecallInstallUpdate$1 = "Update inside the plugin to {version}";
+var deckrecallUpdating$1 = "Downloading, verifying, and safely updating…";
+var deckrecallUpdateAvailable$1 = "Installed {installed}; latest final release {latest}.";
+var deckrecallUpToDate$1 = "Latest final release {latest} is installed.";
+var deckrecallUpdated$1 = "Updated to {latest}. Restart Decky Loader.";
+var deckrecall_updated$1 = "DeckRecall updated safely.";
+var self_update_download_phase$1 = "Downloading DeckRecall";
+var self_update_verify_phase$1 = "Verifying DeckRecall";
+var self_update_install_phase$1 = "Installing DeckRecall";
+var self_update_complete_phase$1 = "DeckRecall update complete";
+var self_update_installed_version_invalid$1 = "The installed package version could not be read.";
+var self_update_release_unavailable$1 = "The official DeckRecall Release could not be reached.";
+var self_update_release_invalid$1 = "The official Release metadata is invalid.";
+var self_update_download_failed$1 = "The DeckRecall update could not be downloaded.";
+var self_update_checksum_failed$1 = "The update SHA-256 did not match; the installed plugin was not changed.";
+var self_update_archive_invalid$1 = "The update archive is unsafe or incomplete.";
+var self_update_version_mismatch$1 = "The update package version does not match its Release tag.";
+var self_update_target_invalid$1 = "The installed DeckRecall directory is unsafe; update stopped.";
+var self_update_too_large$1 = "The DeckRecall update exceeds the safety limit.";
+var self_update_install_failed$1 = "DeckRecall update installation failed; the old version was kept.";
 var changesDetected$1 = "Changes detected";
 var save$1 = "Save healthy state";
 var restore$1 = "Restore safely";
@@ -459,6 +482,29 @@ var enUS = {
 	title: title$1,
 	noGame: noGame$1,
 	normal: normal$1,
+	deckrecallUpdateTitle: deckrecallUpdateTitle$1,
+	deckrecallCheckUpdate: deckrecallCheckUpdate$1,
+	deckrecallCheckingUpdate: deckrecallCheckingUpdate$1,
+	deckrecallInstallUpdate: deckrecallInstallUpdate$1,
+	deckrecallUpdating: deckrecallUpdating$1,
+	deckrecallUpdateAvailable: deckrecallUpdateAvailable$1,
+	deckrecallUpToDate: deckrecallUpToDate$1,
+	deckrecallUpdated: deckrecallUpdated$1,
+	deckrecall_updated: deckrecall_updated$1,
+	self_update_download_phase: self_update_download_phase$1,
+	self_update_verify_phase: self_update_verify_phase$1,
+	self_update_install_phase: self_update_install_phase$1,
+	self_update_complete_phase: self_update_complete_phase$1,
+	self_update_installed_version_invalid: self_update_installed_version_invalid$1,
+	self_update_release_unavailable: self_update_release_unavailable$1,
+	self_update_release_invalid: self_update_release_invalid$1,
+	self_update_download_failed: self_update_download_failed$1,
+	self_update_checksum_failed: self_update_checksum_failed$1,
+	self_update_archive_invalid: self_update_archive_invalid$1,
+	self_update_version_mismatch: self_update_version_mismatch$1,
+	self_update_target_invalid: self_update_target_invalid$1,
+	self_update_too_large: self_update_too_large$1,
+	self_update_install_failed: self_update_install_failed$1,
 	changesDetected: changesDetected$1,
 	save: save$1,
 	restore: restore$1,
@@ -647,6 +693,29 @@ var enUS = {
 var title = "DeckRecall";
 var noGame = "未检测到正在运行的 Steam 游戏。";
 var normal = "未发现变化。";
+var deckrecallUpdateTitle = "DeckRecall 更新";
+var deckrecallCheckUpdate = "检测更新";
+var deckrecallCheckingUpdate = "正在读取已安装版本和正式 Release…";
+var deckrecallInstallUpdate = "在插件内更新到 {version}";
+var deckrecallUpdating = "正在下载、校验并安全更新…";
+var deckrecallUpdateAvailable = "已安装 {installed}；最新正式版 {latest}。";
+var deckrecallUpToDate = "已是最新正式版 {latest}。";
+var deckrecallUpdated = "已更新到 {latest}。请重启 Decky Loader。";
+var deckrecall_updated = "DeckRecall 已安全更新。";
+var self_update_download_phase = "正在下载 DeckRecall";
+var self_update_verify_phase = "正在校验 DeckRecall";
+var self_update_install_phase = "正在安装 DeckRecall";
+var self_update_complete_phase = "DeckRecall 更新完成";
+var self_update_installed_version_invalid = "无法读取当前安装包的版本。";
+var self_update_release_unavailable = "无法连接 DeckRecall 官方 Release。";
+var self_update_release_invalid = "官方 Release 元数据无效。";
+var self_update_download_failed = "DeckRecall 更新包下载失败。";
+var self_update_checksum_failed = "更新包 SHA-256 校验失败，未修改现有插件。";
+var self_update_archive_invalid = "更新包结构不安全或不完整。";
+var self_update_version_mismatch = "更新包内版本与 Release 标签不一致。";
+var self_update_target_invalid = "当前 DeckRecall 安装目录不安全，已停止更新。";
+var self_update_too_large = "DeckRecall 更新包超过安全大小限制。";
+var self_update_install_failed = "DeckRecall 更新安装失败，旧版本已保留。";
 var changesDetected = "检测到变化";
 var save = "保存正常运行状态";
 var restore = "安全恢复";
@@ -834,6 +903,29 @@ var zhCN = {
 	title: title,
 	noGame: noGame,
 	normal: normal,
+	deckrecallUpdateTitle: deckrecallUpdateTitle,
+	deckrecallCheckUpdate: deckrecallCheckUpdate,
+	deckrecallCheckingUpdate: deckrecallCheckingUpdate,
+	deckrecallInstallUpdate: deckrecallInstallUpdate,
+	deckrecallUpdating: deckrecallUpdating,
+	deckrecallUpdateAvailable: deckrecallUpdateAvailable,
+	deckrecallUpToDate: deckrecallUpToDate,
+	deckrecallUpdated: deckrecallUpdated,
+	deckrecall_updated: deckrecall_updated,
+	self_update_download_phase: self_update_download_phase,
+	self_update_verify_phase: self_update_verify_phase,
+	self_update_install_phase: self_update_install_phase,
+	self_update_complete_phase: self_update_complete_phase,
+	self_update_installed_version_invalid: self_update_installed_version_invalid,
+	self_update_release_unavailable: self_update_release_unavailable,
+	self_update_release_invalid: self_update_release_invalid,
+	self_update_download_failed: self_update_download_failed,
+	self_update_checksum_failed: self_update_checksum_failed,
+	self_update_archive_invalid: self_update_archive_invalid,
+	self_update_version_mismatch: self_update_version_mismatch,
+	self_update_target_invalid: self_update_target_invalid,
+	self_update_too_large: self_update_too_large,
+	self_update_install_failed: self_update_install_failed,
 	changesDetected: changesDetected,
 	save: save,
 	restore: restore,
@@ -1271,10 +1363,12 @@ const installTrainerCompat = callable("install_trainer_compat");
 const getMemoryStatus = callable("get_memory_status");
 const applyRecommendedMemory = callable("apply_recommended_memory");
 const restoreMemoryTuning = callable("restore_memory_tuning");
+const getDeckRecallUpdateStatus = callable("get_deckrecall_update_status");
+const installDeckRecallUpdate = callable("install_deckrecall_update");
 const GAME_KEY = "deckRecall.lastGame";
 const LANGUAGE_KEY = "deckRecall.language";
 const AUTO_SNAPSHOT_KEY = "deckRecall.autoSnapshot";
-const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "trainer_search_invalid", "trainer_search_failed", "trainer_not_found", "trainer_download_unavailable", "trainer_download_failed", "trainer_download_too_large", "trainer_download_invalid", "trainer_documents_unavailable", "trainer_compat_invalid", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_bundled_missing", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "memory_steamos_required", "memory_device_unsupported", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
+const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "trainer_search_invalid", "trainer_search_failed", "trainer_not_found", "trainer_download_unavailable", "trainer_download_failed", "trainer_download_too_large", "trainer_download_invalid", "trainer_documents_unavailable", "trainer_compat_invalid", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_bundled_missing", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "self_update_installed_version_invalid", "self_update_release_unavailable", "self_update_release_invalid", "self_update_download_failed", "self_update_checksum_failed", "self_update_archive_invalid", "self_update_version_mismatch", "self_update_target_invalid", "self_update_too_large", "self_update_install_failed", "memory_steamos_required", "memory_device_unsupported", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
 function currentSteamLanguage() {
     try {
         const language = globalThis.SteamClient?.Settings?.GetCurrentLanguage?.();
@@ -1989,6 +2083,54 @@ function QuickAccessContent() {
     const [officialInstallerOpened, setOfficialInstallerOpened] = SP_REACT.useState("");
     const [installingGe, setInstallingGe] = SP_REACT.useState(false);
     const [geStatus, setGeStatus] = SP_REACT.useState("");
+    const [updateStatus, setUpdateStatus] = SP_REACT.useState();
+    const [checkingUpdate, setCheckingUpdate] = SP_REACT.useState(false);
+    const [installingUpdate, setInstallingUpdate] = SP_REACT.useState(false);
+    const [updateFeedback, setUpdateFeedback] = SP_REACT.useState("");
+    const checkDeckRecallUpdate = async () => {
+        setCheckingUpdate(true);
+        setUpdateFeedback("");
+        try {
+            const status = await withTimeout(getDeckRecallUpdateStatus(), 30000);
+            setUpdateStatus(status);
+            setUpdateFeedback(t(status.update_available ? "deckrecallUpdateAvailable" : "deckrecallUpToDate", {
+                installed: status.installed_version,
+                latest: status.latest_version,
+            }));
+        }
+        catch (error) {
+            setUpdateFeedback(t(normalizeError(error)));
+        }
+        finally {
+            setCheckingUpdate(false);
+        }
+    };
+    const updateDeckRecall = async () => {
+        setInstallingUpdate(true);
+        setUpdateFeedback("");
+        try {
+            const result = await withTimeout(installDeckRecallUpdate(), 30 * 60 * 1000);
+            setUpdateStatus({
+                installed_version: result.updated ? result.latest_version : result.installed_version,
+                latest_version: result.latest_version,
+                update_available: false,
+            });
+            const message = t(result.updated ? "deckrecallUpdated" : "deckrecallUpToDate", {
+                installed: result.updated ? result.latest_version : result.installed_version,
+                latest: result.latest_version,
+            });
+            setUpdateFeedback(message);
+            toaster.toast({ title: "DeckRecall", body: message, duration: 7000, showToast: true });
+        }
+        catch (error) {
+            const code = normalizeError(error);
+            setUpdateFeedback(t(code));
+            toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
+        }
+        finally {
+            setInstallingUpdate(false);
+        }
+    };
     const requestOfficialProtonInstall = async (toolAppId, toolName) => {
         try {
             await queueOfficialProtonInstaller(toolAppId);
@@ -2022,7 +2164,7 @@ function QuickAccessContent() {
             setInstallingGe(false);
         }
     };
-    return SP_JSX.jsxs(DFL.Focusable, { style: { display: "flex", flexDirection: "column" }, children: [SP_JSX.jsx(DFL.PanelSection, { title: t("language"), children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("language"), selectedOption: preference, rgOptions: [
+    return SP_JSX.jsxs(DFL.Focusable, { style: { display: "flex", flexDirection: "column" }, children: [SP_JSX.jsxs(DFL.PanelSection, { title: t("deckrecallUpdateTitle"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate || installingUpdate, onClick: () => void checkDeckRecallUpdate(), children: checkingUpdate ? t("deckrecallCheckingUpdate") : t("deckrecallCheckUpdate") }) }), updateStatus?.update_available && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: installingUpdate, onClick: () => void updateDeckRecall(), children: installingUpdate ? t("deckrecallUpdating") : t("deckrecallInstallUpdate", { version: updateStatus.latest_version }) }) }), updateFeedback && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: updateFeedback }) })] }), SP_JSX.jsx(DFL.PanelSection, { title: t("language"), children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("language"), selectedOption: preference, rgOptions: [
                             { label: t("system"), data: "system" },
                             { label: t("english"), data: "en-US" },
                             { label: t("chinese"), data: "zh-CN" },

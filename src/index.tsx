@@ -37,6 +37,8 @@ type ActivityEvent = { at: string; code: string };
 type CreateResult = { ok: boolean; snapshot: Snapshot; diagnostics: Diagnostic };
 type RestoreResult = { ok: boolean; undo_id: string; diagnostics: Diagnostic };
 type GeProtonResult = { ok: boolean; version: string; source: string };
+type DeckRecallUpdateStatus = { installed_version: string; latest_version: string; update_available: boolean };
+type DeckRecallUpdateResult = DeckRecallUpdateStatus & { ok: boolean; updated: boolean; restart_required?: boolean };
 type TrainerDownload = { url: string; title: string; directory: string };
 type TrainerSaved = { path: string; title: string; directory: string };
 type TrainerCompatVersion = "GE-Proton7-55" | "GE-Proton8-25" | "GE-Proton9-27" | "GE-Proton10-29";
@@ -59,12 +61,14 @@ const installTrainerCompat = callable<[version: TrainerCompatVersion], { ok: boo
 const getMemoryStatus = callable<[], MemoryStatus>("get_memory_status");
 const applyRecommendedMemory = callable<[], { ok: boolean; profile: string; recommended_swap_gib: number; swap_path: string }>("apply_recommended_memory");
 const restoreMemoryTuning = callable<[], { ok: boolean }>("restore_memory_tuning");
+const getDeckRecallUpdateStatus = callable<[], DeckRecallUpdateStatus>("get_deckrecall_update_status");
+const installDeckRecallUpdate = callable<[], DeckRecallUpdateResult>("install_deckrecall_update");
 
 
 const GAME_KEY = "deckRecall.lastGame";
 const LANGUAGE_KEY = "deckRecall.language";
 const AUTO_SNAPSHOT_KEY = "deckRecall.autoSnapshot";
-const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "trainer_search_invalid", "trainer_search_failed", "trainer_not_found", "trainer_download_unavailable", "trainer_download_failed", "trainer_download_too_large", "trainer_download_invalid", "trainer_documents_unavailable", "trainer_compat_invalid", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_bundled_missing", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "memory_steamos_required", "memory_device_unsupported", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
+const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "trainer_search_invalid", "trainer_search_failed", "trainer_not_found", "trainer_download_unavailable", "trainer_download_failed", "trainer_download_too_large", "trainer_download_invalid", "trainer_documents_unavailable", "trainer_compat_invalid", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_bundled_missing", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "self_update_installed_version_invalid", "self_update_release_unavailable", "self_update_release_invalid", "self_update_download_failed", "self_update_checksum_failed", "self_update_archive_invalid", "self_update_version_mismatch", "self_update_target_invalid", "self_update_too_large", "self_update_install_failed", "memory_steamos_required", "memory_device_unsupported", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
 
 function currentSteamLanguage(): string | undefined {
   try {
@@ -1007,6 +1011,52 @@ function QuickAccessContent() {
   const [officialInstallerOpened, setOfficialInstallerOpened] = useState("");
   const [installingGe, setInstallingGe] = useState(false);
   const [geStatus, setGeStatus] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<DeckRecallUpdateStatus>();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState("");
+
+  const checkDeckRecallUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateFeedback("");
+    try {
+      const status = await withTimeout(getDeckRecallUpdateStatus(), 30000);
+      setUpdateStatus(status);
+      setUpdateFeedback(t(status.update_available ? "deckrecallUpdateAvailable" : "deckrecallUpToDate", {
+        installed: status.installed_version,
+        latest: status.latest_version,
+      }));
+    } catch (error) {
+      setUpdateFeedback(t(normalizeError(error)));
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const updateDeckRecall = async () => {
+    setInstallingUpdate(true);
+    setUpdateFeedback("");
+    try {
+      const result = await withTimeout(installDeckRecallUpdate(), 30 * 60 * 1000);
+      setUpdateStatus({
+        installed_version: result.updated ? result.latest_version : result.installed_version,
+        latest_version: result.latest_version,
+        update_available: false,
+      });
+      const message = t(result.updated ? "deckrecallUpdated" : "deckrecallUpToDate", {
+        installed: result.updated ? result.latest_version : result.installed_version,
+        latest: result.latest_version,
+      });
+      setUpdateFeedback(message);
+      toaster.toast({ title: "DeckRecall", body: message, duration: 7000, showToast: true });
+    } catch (error) {
+      const code = normalizeError(error);
+      setUpdateFeedback(t(code));
+      toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
+    } finally {
+      setInstallingUpdate(false);
+    }
+  };
 
   const requestOfficialProtonInstall = async (toolAppId: number, toolName: string) => {
     try {
@@ -1041,6 +1091,19 @@ function QuickAccessContent() {
   };
 
   return <Focusable style={{ display: "flex", flexDirection: "column" }}>
+    <PanelSection title={t("deckrecallUpdateTitle")}>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={checkingUpdate || installingUpdate} onClick={() => void checkDeckRecallUpdate()}>
+          {checkingUpdate ? t("deckrecallCheckingUpdate") : t("deckrecallCheckUpdate")}
+        </ButtonItem>
+      </PanelSectionRow>
+      {updateStatus?.update_available && <PanelSectionRow>
+        <ButtonItem layout="below" disabled={installingUpdate} onClick={() => void updateDeckRecall()}>
+          {installingUpdate ? t("deckrecallUpdating") : t("deckrecallInstallUpdate", { version: updateStatus.latest_version })}
+        </ButtonItem>
+      </PanelSectionRow>}
+      {updateFeedback && <PanelSectionRow><div style={{ color: "#7dd3fc", fontWeight: 600 }}>{updateFeedback}</div></PanelSectionRow>}
+    </PanelSection>
     <PanelSection title={t("language")}>
       <PanelSectionRow>
         <DropdownItem
