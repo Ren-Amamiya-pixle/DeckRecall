@@ -2,6 +2,7 @@
   "name": "deckrecall",
   "version": "0.2.8",
   "private": true,
+  "author": "Ren-Amamiya-pixle",
   "description": "SteamOS Decky Loader plugin for safe game-state snapshots",
   "type": "module",
   "scripts": {
