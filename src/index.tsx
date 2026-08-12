@@ -24,6 +24,7 @@ import {
   PROTON_EXPERIMENTAL_APP_ID,
 } from "./compat";
 import { installGameContextMenuPatch } from "./contextMenuPatch";
+import { normalizeError } from "./errors";
 import { Language, resolveLanguage, translate } from "./i18n";
 import { buildLaunchOptions, EMPTY_PROFILE, LaunchProfile, rebaseLaunchProfile } from "./launch";
 import { MemoryStatus, memoryTuningConfigured, normalizeMemoryStatus } from "./memory";
@@ -68,7 +69,6 @@ const installDeckRecallUpdate = callable<[], DeckRecallUpdateResult>("install_de
 const GAME_KEY = "deckRecall.lastGame";
 const LANGUAGE_KEY = "deckRecall.language";
 const AUTO_SNAPSHOT_KEY = "deckRecall.autoSnapshot";
-const ERROR_CODES = ["backend_error", "unknown_error", "invalid_app_id", "snapshot_not_found", "snapshot_integrity_failed", "undo_not_found", "file_too_large", "invalid_launch_profile", "invalid_executable_path", "executable_required", "invalid_launch_options", "launch_options_changed", "steam_root_not_found", "trainer_search_invalid", "trainer_search_failed", "trainer_not_found", "trainer_download_unavailable", "trainer_download_failed", "trainer_download_too_large", "trainer_download_invalid", "trainer_documents_unavailable", "trainer_compat_invalid", "protontricks_not_installed", "protontricks_launch_failed", "ge_proton_release_unavailable", "ge_proton_release_invalid", "ge_proton_download_failed", "ge_proton_download_too_large", "ge_proton_checksum_missing", "ge_proton_checksum_failed", "ge_proton_archive_invalid", "ge_proton_archive_too_large", "ge_proton_owner_failed", "plugin_install_invalid", "plugin_install_bundled_missing", "plugin_install_download_failed", "plugin_install_checksum_failed", "plugin_install_archive_invalid", "plugin_install_too_large", "plugin_install_owner_failed", "self_update_installed_version_invalid", "self_update_release_unavailable", "self_update_release_invalid", "self_update_download_failed", "self_update_checksum_failed", "self_update_archive_invalid", "self_update_version_mismatch", "self_update_target_invalid", "self_update_too_large", "self_update_install_failed", "memory_steamos_required", "memory_device_unsupported", "memory_root_required", "memory_command_missing", "memory_read_failed", "memory_backend_unavailable", "memory_path_invalid", "memory_space_insufficient", "memory_battery_low", "memory_config_conflict", "memory_swap_create_failed", "memory_swap_unit_failed", "memory_apply_failed", "memory_restore_failed"];
 
 function currentSteamLanguage(): string | undefined {
   try {
@@ -169,11 +169,6 @@ function loadLastGame(): Game | undefined {
   } catch {
     return undefined;
   }
-}
-
-function normalizeError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return ERROR_CODES.find((code) => message.includes(code)) || "unknown_error";
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs = 6000): Promise<T> {
