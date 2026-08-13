@@ -1,5 +1,10 @@
 # DeckRecall
 
+DeckRecall 0.4.7 makes the LSFG/FSR4 install buttons explicitly online-capable and corrects the trainer compatibility-layer wording:
+
+- LSFG and FSR4 installs use the fixed Gitee chunk mirror when the bundled ZIP is absent, with a vetted GitHub fallback;
+- trainer compatibility hints now distinguish newer games/trainers from older games/trainers.
+
 DeckRecall 0.4.6 fixes GE-Proton installs on every supported SteamOS Python:
 
 - extracts validated GE-Proton archives manually, so install no longer depends on Python 3.12's `tarfile` filter API;
@@ -48,7 +53,7 @@ An independent [Decky Loader](https://decky.xyz/) plugin for SteamOS that rememb
 - **Trainer** resolves only a `flingtrainer.com` attachment, calls Steam's native `SteamClient.Browser.StartDownload`, and also performs a constrained fallback save to `/home/deck/Documents`. The fallback rejects redirects off the official host, files above 128 MB, and non-PE downloads before atomically saving and selecting the EXE.
 - **Little Yellow Duck / LSFG-VK** adds `~/lsfg`; it requires Lossless Scaling and the `decky-lsfg-vk` plugin.
 - **FSR4 / OptiScaler** adds `~/fgmod/fgmod`; it requires the `Decky-Framegen` plugin and the appropriate FSR4 runtime configured there.
-- Chinese LSFG and FSR4 plugin ZIPs are both included in the complete DeckRecall release package. Each is SHA-256 verified, traversal/symlink checked, size bounded, and installed with live verify/install progress without depending on game-mode network access.
+- Chinese LSFG and FSR4 plugin ZIPs are both included in the complete DeckRecall release package. When the bundled ZIP is absent, the installer downloads the same SHA-256 verified archives from the fixed Gitee chunk mirror first. Each install is traversal/symlink checked, size bounded, and shows live verify/install progress without depending on game-mode network access.
 - **Fully remove FSR4 / OptiScaler** replaces the normal FSR4 wrapper with Decky-Framegen's `~/fgmod/fgmod-uninstaller.sh %command%`. Apply it and run the affected game once to remove its patch; then turn the option off and apply again, or restore the original launch options.
 - All three options are independent and can be composed into one launch command, using `--` between wrapper commands.
 - DeckRecall records the exact original launch options before its first change. “Restore original launch options” puts them back verbatim.
@@ -59,7 +64,7 @@ An independent [Decky Loader](https://decky.xyz/) plugin for SteamOS that rememb
 - DeckRecall reads the compatibility tools Steam exposes for the selected game and offers Proton Experimental, Proton 10.0-4, installed GE-Proton versions, and Steam's automatic default.
 - DeckRecall always provides native SteamOS install/update actions for Proton Experimental (Steam app 1493710) and Proton 10.0 (Steam app 3658110), even before the compatibility-tool list has loaded. Steam remains responsible for licensing, storage selection, download progress, updates, and integrity checks.
 - GE-Proton is third-party software. DeckRecall reads the author's newest GitHub Release SHA-256 digest, falls back to a pinned verified version if the API is unavailable, tries a fixed checksummed Gitee chunk mirror before the GitHub fallback list, and safely installs it to Steam's `compatibilitytools.d` directory only after verification.
-- The trainer compatibility submenu provides four independent, checksummed upstream installs with separate progress: GE-Proton7-55, 8-25, 9-27, and 10-29. The UI labels 10-29 for current game/trainer versions and the other three for older versions, while still requiring per-game testing.
+- The trainer compatibility submenu provides four independent, checksummed upstream installs with separate progress: GE-Proton7-55, 8-25, 9-27, and 10-29. The UI labels 10-29 for newer games/trainers and the other three for older games/trainers, while still requiring per-game testing.
 - Large plugin, compatibility-layer, and DeckRecall-update downloads run in a serialized backend queue. Starting a download returns immediately; the backend remains the source of truth for queued/running/completed/failed state, so leaving and reopening the page restores live progress instead of pinning a long Decky RPC at 0%.
 
 ## Virtual memory
