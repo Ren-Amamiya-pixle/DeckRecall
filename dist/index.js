@@ -287,6 +287,7 @@ const ERROR_CODES = [
     "self_update_release_unavailable", "self_update_release_invalid", "self_update_download_failed",
     "self_update_checksum_failed", "self_update_archive_invalid", "self_update_version_mismatch",
     "self_update_target_invalid", "self_update_too_large", "self_update_install_failed",
+    "download_job_invalid", "download_job_active",
     "memory_steamos_required", "memory_device_unsupported", "memory_root_required",
     "memory_command_missing", "memory_read_failed", "memory_backend_unavailable",
     "memory_path_invalid", "memory_space_insufficient", "memory_battery_low",
@@ -335,6 +336,7 @@ var deckrecallUpdateAvailable$1 = "Installed {installed}; latest final release {
 var deckrecallUpToDate$1 = "Latest final release {latest} is installed.";
 var deckrecallUpdated$1 = "Updated to {latest}. Restart Decky Loader.";
 var deckrecall_updated$1 = "DeckRecall updated safely.";
+var download_queued_phase$1 = "Queued";
 var self_update_download_phase$1 = "Downloading DeckRecall";
 var self_update_verify_phase$1 = "Verifying DeckRecall";
 var self_update_install_phase$1 = "Installing DeckRecall";
@@ -349,6 +351,8 @@ var self_update_version_mismatch$1 = "The update package version does not match 
 var self_update_target_invalid$1 = "The installed DeckRecall directory is unsafe; update stopped.";
 var self_update_too_large$1 = "The DeckRecall update exceeds the safety limit.";
 var self_update_install_failed$1 = "DeckRecall update installation failed; the old version was kept.";
+var download_job_invalid$1 = "The download task no longer exists.";
+var download_job_active$1 = "The active download task cannot be cleared.";
 var changesDetected$1 = "Changes detected";
 var save$1 = "Save healthy state";
 var restore$1 = "Restore safely";
@@ -545,6 +549,7 @@ var enUS = {
 	deckrecallUpToDate: deckrecallUpToDate$1,
 	deckrecallUpdated: deckrecallUpdated$1,
 	deckrecall_updated: deckrecall_updated$1,
+	download_queued_phase: download_queued_phase$1,
 	self_update_download_phase: self_update_download_phase$1,
 	self_update_verify_phase: self_update_verify_phase$1,
 	self_update_install_phase: self_update_install_phase$1,
@@ -559,6 +564,8 @@ var enUS = {
 	self_update_target_invalid: self_update_target_invalid$1,
 	self_update_too_large: self_update_too_large$1,
 	self_update_install_failed: self_update_install_failed$1,
+	download_job_invalid: download_job_invalid$1,
+	download_job_active: download_job_active$1,
 	changesDetected: changesDetected$1,
 	save: save$1,
 	restore: restore$1,
@@ -756,6 +763,7 @@ var deckrecallUpdateAvailable = "已安装 {installed}；最新正式版 {latest
 var deckrecallUpToDate = "已是最新正式版 {latest}。";
 var deckrecallUpdated = "已更新到 {latest}。请重启 Decky Loader。";
 var deckrecall_updated = "DeckRecall 已安全更新。";
+var download_queued_phase = "排队等待下载";
 var self_update_download_phase = "正在下载 DeckRecall";
 var self_update_verify_phase = "正在校验 DeckRecall";
 var self_update_install_phase = "正在安装 DeckRecall";
@@ -770,6 +778,8 @@ var self_update_version_mismatch = "更新包内版本与 Release 标签不一�
 var self_update_target_invalid = "当前 DeckRecall 安装目录不安全，已停止更新。";
 var self_update_too_large = "DeckRecall 更新包超过安全大小限制。";
 var self_update_install_failed = "DeckRecall 更新安装失败，旧版本已保留。";
+var download_job_invalid = "下载任务已不存在。";
+var download_job_active = "正在运行的下载任务不能清除。";
 var changesDetected = "检测到变化";
 var save = "保存正常运行状态";
 var restore = "安全恢复";
@@ -966,6 +976,7 @@ var zhCN = {
 	deckrecallUpToDate: deckrecallUpToDate,
 	deckrecallUpdated: deckrecallUpdated,
 	deckrecall_updated: deckrecall_updated,
+	download_queued_phase: download_queued_phase,
 	self_update_download_phase: self_update_download_phase,
 	self_update_verify_phase: self_update_verify_phase,
 	self_update_install_phase: self_update_install_phase,
@@ -980,6 +991,8 @@ var zhCN = {
 	self_update_target_invalid: self_update_target_invalid,
 	self_update_too_large: self_update_too_large,
 	self_update_install_failed: self_update_install_failed,
+	download_job_invalid: download_job_invalid,
+	download_job_active: download_job_active,
 	changesDetected: changesDetected,
 	save: save,
 	restore: restore,
@@ -1412,13 +1425,14 @@ const installLatestGeProton = callable("install_latest_ge_proton");
 const openProtontricks = callable("open_protontricks");
 const prepareTrainerDownload = callable("prepare_trainer_download");
 const downloadTrainerToDocuments = callable("download_trainer_to_documents");
-const installChinesePlugin = callable("install_chinese_plugin");
-const installTrainerCompat = callable("install_trainer_compat");
+const startChinesePluginInstall = callable("start_chinese_plugin_install");
+const startTrainerCompatInstall = callable("start_trainer_compat_install");
 const getMemoryStatus = callable("get_memory_status");
 const applyRecommendedMemory = callable("apply_recommended_memory");
 const restoreMemoryTuning = callable("restore_memory_tuning");
 const getDeckRecallUpdateStatus = callable("get_deckrecall_update_status");
-const installDeckRecallUpdate = callable("install_deckrecall_update");
+const startDeckRecallUpdate = callable("start_deckrecall_update");
+const getDownloadJobs = callable("get_download_jobs");
 const GAME_KEY = "deckRecall.lastGame";
 const LANGUAGE_KEY = "deckRecall.language";
 const AUTO_SNAPSHOT_KEY = "deckRecall.autoSnapshot";
@@ -1761,6 +1775,7 @@ function GameContent({ appId }) {
     const [installingTrainerCompat, setInstallingTrainerCompat] = SP_REACT.useState();
     const [trainerCompatProgress, setTrainerCompatProgress] = SP_REACT.useState({});
     const [trainerCompatStatus, setTrainerCompatStatus] = SP_REACT.useState("");
+    const [downloadJobs, setDownloadJobs] = SP_REACT.useState([]);
     const [launchPreview, setLaunchPreview] = SP_REACT.useState("");
     const [autoSnapshot, setAutoSnapshot] = SP_REACT.useState(() => storageGet(AUTO_SNAPSHOT_KEY) !== "false");
     const refresh = async () => {
@@ -1980,14 +1995,12 @@ function GameContent({ appId }) {
         setPluginInstallStatus("");
         setPluginInstallProgress({ phase: "plugin_download_phase", percent: 0 });
         try {
-            await installChinesePlugin(kind);
-            setPluginInstallStatus(t("pluginInstallComplete"));
+            await startChinesePluginInstall(kind);
+            setDownloadJobs(await getDownloadJobs());
         }
         catch (nextError) {
             console.warn("[DeckRecall] Could not install Chinese plugin", nextError);
             setPluginInstallStatus(t(normalizeError(nextError)));
-        }
-        finally {
             setRequestingPluginInstall(undefined);
         }
     };
@@ -2025,16 +2038,61 @@ function GameContent({ appId }) {
         setTrainerCompatStatus("");
         setTrainerCompatProgress((current) => ({ ...current, [version]: { phase: "compat_download_phase", percent: 0 } }));
         try {
-            const result = await installTrainerCompat(version);
-            setTrainerCompatStatus(t("trainerCompatInstalled", { version: result.version }));
+            await startTrainerCompatInstall(version);
+            setDownloadJobs(await getDownloadJobs());
         }
         catch (nextError) {
             setTrainerCompatStatus(t(normalizeError(nextError)));
-        }
-        finally {
             setInstallingTrainerCompat(undefined);
         }
     };
+    SP_REACT.useEffect(() => {
+        void getDownloadJobs().then(setDownloadJobs).catch((nextError) => {
+            console.warn("[DeckRecall] Could not hydrate download queue", nextError);
+        });
+        const listener = addEventListener("download_jobs_changed", setDownloadJobs);
+        return () => removeEventListener("download_jobs_changed", listener);
+    }, []);
+    SP_REACT.useEffect(() => {
+        const activePlugin = [...downloadJobs].reverse().find((job) => job.target.startsWith("plugin:") && (job.status === "queued" || job.status === "running"));
+        if (activePlugin) {
+            const kind = activePlugin.target.slice("plugin:".length);
+            if (kind === "lsfg" || kind === "fsr4") {
+                setRequestingPluginInstall(kind);
+                setPluginInstallProgress({
+                    phase: activePlugin.status === "queued" ? "download_queued_phase" : activePlugin.phase,
+                    percent: activePlugin.percent,
+                });
+            }
+        }
+        else if (requestingPluginInstall) {
+            const completed = [...downloadJobs].reverse().find((job) => job.target === `plugin:${requestingPluginInstall}`);
+            if (completed?.status === "done")
+                setPluginInstallStatus(t("pluginInstallComplete"));
+            if (completed?.status === "failed")
+                setPluginInstallStatus(t(normalizeError(new Error(completed.error))));
+            if (completed)
+                setRequestingPluginInstall(undefined);
+        }
+        const activeCompat = [...downloadJobs].reverse().find((job) => job.target.startsWith("compat:") && (job.status === "queued" || job.status === "running"));
+        if (activeCompat) {
+            const version = activeCompat.target.slice("compat:".length);
+            setInstallingTrainerCompat(version);
+            setTrainerCompatProgress((current) => ({ ...current, [version]: {
+                    phase: activeCompat.status === "queued" ? "download_queued_phase" : activeCompat.phase,
+                    percent: activeCompat.percent,
+                } }));
+        }
+        else if (installingTrainerCompat) {
+            const completed = [...downloadJobs].reverse().find((job) => job.target === `compat:${installingTrainerCompat}`);
+            if (completed?.status === "done")
+                setTrainerCompatStatus(t("trainerCompatInstalled", { version: installingTrainerCompat }));
+            if (completed?.status === "failed")
+                setTrainerCompatStatus(t(normalizeError(new Error(completed.error))));
+            if (completed)
+                setInstallingTrainerCompat(undefined);
+        }
+    }, [downloadJobs]);
     SP_REACT.useEffect(() => {
         const listener = addEventListener("plugin_install_progress", (kind, phase, percent) => {
             if ((kind === "lsfg" || kind === "fsr4") && typeof phase === "string" && typeof percent === "number") {
@@ -2136,6 +2194,8 @@ function QuickAccessContent() {
     const [checkingUpdate, setCheckingUpdate] = SP_REACT.useState(false);
     const [installingUpdate, setInstallingUpdate] = SP_REACT.useState(false);
     const [updateFeedback, setUpdateFeedback] = SP_REACT.useState("");
+    const [updateProgress, setUpdateProgress] = SP_REACT.useState();
+    const [downloadJobs, setDownloadJobs] = SP_REACT.useState([]);
     const checkDeckRecallUpdate = async () => {
         setCheckingUpdate(true);
         setUpdateFeedback("");
@@ -2157,29 +2217,47 @@ function QuickAccessContent() {
     const updateDeckRecall = async () => {
         setInstallingUpdate(true);
         setUpdateFeedback("");
+        setUpdateProgress({ phase: "self_update_download_phase", percent: 0 });
         try {
-            const result = await withTimeout(installDeckRecallUpdate(), 30 * 60 * 1000);
-            setUpdateStatus({
-                installed_version: result.updated ? result.latest_version : result.installed_version,
-                latest_version: result.latest_version,
-                update_available: false,
-            });
-            const message = t(result.updated ? "deckrecallUpdated" : "deckrecallUpToDate", {
-                installed: result.updated ? result.latest_version : result.installed_version,
-                latest: result.latest_version,
-            });
-            setUpdateFeedback(message);
-            toaster.toast({ title: "DeckRecall", body: message, duration: 7000, showToast: true });
+            await startDeckRecallUpdate();
+            setDownloadJobs(await getDownloadJobs());
         }
         catch (error) {
             const code = normalizeError(error);
             setUpdateFeedback(t(code));
             toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
-        }
-        finally {
             setInstallingUpdate(false);
         }
     };
+    SP_REACT.useEffect(() => {
+        void getDownloadJobs().then(setDownloadJobs).catch((error) => {
+            console.warn("[DeckRecall] Could not hydrate download queue", error);
+        });
+        const listener = addEventListener("download_jobs_changed", setDownloadJobs);
+        return () => removeEventListener("download_jobs_changed", listener);
+    }, []);
+    SP_REACT.useEffect(() => {
+        const updateJob = [...downloadJobs].reverse().find((job) => job.target === "self_update");
+        if (!updateJob)
+            return;
+        setUpdateProgress({
+            phase: updateJob.status === "queued" ? "download_queued_phase" : updateJob.phase,
+            percent: updateJob.percent,
+        });
+        if (updateJob.status === "queued" || updateJob.status === "running") {
+            setInstallingUpdate(true);
+            return;
+        }
+        setInstallingUpdate(false);
+        if (updateJob.status === "done" && updateStatus) {
+            const message = t("deckrecallUpdated", { installed: updateStatus.latest_version, latest: updateStatus.latest_version });
+            setUpdateStatus({ ...updateStatus, installed_version: updateStatus.latest_version, update_available: false });
+            setUpdateFeedback(message);
+        }
+        else if (updateJob.status === "failed") {
+            setUpdateFeedback(t(normalizeError(new Error(updateJob.error))));
+        }
+    }, [downloadJobs]);
     const requestOfficialProtonInstall = async (toolAppId, toolName) => {
         try {
             await queueOfficialProtonInstaller(toolAppId);
@@ -2213,7 +2291,7 @@ function QuickAccessContent() {
             setInstallingGe(false);
         }
     };
-    return SP_JSX.jsxs(DFL.Focusable, { style: { display: "flex", flexDirection: "column" }, children: [SP_JSX.jsxs(DFL.PanelSection, { title: t("deckrecallUpdateTitle"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate || installingUpdate, onClick: () => void checkDeckRecallUpdate(), children: checkingUpdate ? t("deckrecallCheckingUpdate") : t("deckrecallCheckUpdate") }) }), updateStatus?.update_available && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: installingUpdate, onClick: () => void updateDeckRecall(), children: installingUpdate ? t("deckrecallUpdating") : t("deckrecallInstallUpdate", { version: updateStatus.latest_version }) }) }), updateFeedback && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: updateFeedback }) })] }), SP_JSX.jsx(DFL.PanelSection, { title: t("language"), children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("language"), selectedOption: preference, rgOptions: [
+    return SP_JSX.jsxs(DFL.Focusable, { style: { display: "flex", flexDirection: "column" }, children: [SP_JSX.jsxs(DFL.PanelSection, { title: t("deckrecallUpdateTitle"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate || installingUpdate, onClick: () => void checkDeckRecallUpdate(), children: checkingUpdate ? t("deckrecallCheckingUpdate") : t("deckrecallCheckUpdate") }) }), updateStatus?.update_available && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: installingUpdate, onClick: () => void updateDeckRecall(), children: installingUpdate ? t("deckrecallUpdating") : t("deckrecallInstallUpdate", { version: updateStatus.latest_version }) }) }), installingUpdate && updateProgress && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { width: "100%" }, children: [SP_JSX.jsxs("div", { style: { marginBottom: "6px" }, children: [t(updateProgress.phase), " ", updateProgress.percent, "%"] }), SP_JSX.jsx("div", { style: { height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.18)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { height: "100%", width: `${Math.max(2, updateProgress.percent)}%`, background: "#67c1f5", transition: "width 0.25s ease" } }) })] }) }), updateFeedback && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: updateFeedback }) })] }), SP_JSX.jsx(DFL.PanelSection, { title: t("language"), children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("language"), selectedOption: preference, rgOptions: [
                             { label: t("system"), data: "system" },
                             { label: t("english"), data: "en-US" },
                             { label: t("chinese"), data: "zh-CN" },

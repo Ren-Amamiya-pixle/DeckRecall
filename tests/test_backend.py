@@ -147,6 +147,84 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(self.plugin._hash(archive), expected)
         archive.unlink(missing_ok=True)
 
+    def test_progress_can_be_polled_when_decky_events_are_unavailable(self):
+        self.plugin._record_plugin_progress("lsfg", "plugin_download_phase", 27)
+        plugin_progress = self.run_async(self.plugin.get_plugin_install_progress, "lsfg")
+        self.assertEqual(plugin_progress, {"phase": "plugin_download_phase", "percent": 27})
+
+        self.plugin.compat_download_progress["GE-Proton10-29"] = {
+            "phase": "compat_download_phase", "percent": 31,
+        }
+        compat_progress = self.run_async(
+            self.plugin.get_trainer_compat_progress, "GE-Proton10-29"
+        )
+        self.assertEqual(compat_progress["percent"], 31)
+
+        self.plugin.self_update_progress = {"phase": "self_update_verify_phase", "percent": 96}
+        update_progress = self.run_async(self.plugin.get_deckrecall_update_progress)
+        self.assertEqual(update_progress["phase"], "self_update_verify_phase")
+
+    def test_progress_queries_reject_non_allowlisted_downloads(self):
+        with self.assertRaisesRegex(ValueError, "plugin_install_invalid"):
+            self.run_async(self.plugin.get_plugin_install_progress, "other")
+        with self.assertRaisesRegex(ValueError, "trainer_compat_invalid"):
+            self.run_async(self.plugin.get_trainer_compat_progress, "GE-Proton99-99")
+
+    def test_download_queue_runs_in_background_and_records_result(self):
+        async def scenario():
+            started = asyncio.Event()
+            finish = asyncio.Event()
+
+            async def operation():
+                started.set()
+                await finish.wait()
+                return {"ok": True}
+
+            queued = self.plugin._enqueue_download_job(
+                "plugin:lsfg", "plugin_download_phase", operation
+            )
+            self.assertEqual(queued["status"], "queued")
+            await started.wait()
+            running = (await self.plugin.get_download_jobs())[0]
+            self.assertEqual(running["status"], "running")
+            finish.set()
+            for _ in range(20):
+                await asyncio.sleep(0)
+                completed = (await self.plugin.get_download_jobs())[0]
+                if completed["status"] == "done":
+                    break
+            self.assertEqual(completed["status"], "done")
+            self.assertEqual(completed["percent"], 100)
+            await self.plugin._unload()
+
+        asyncio.run(scenario())
+
+    def test_download_queue_deduplicates_active_target_and_records_failure(self):
+        async def scenario():
+            release = asyncio.Event()
+
+            async def first_operation():
+                await release.wait()
+                raise ValueError("plugin_install_download_failed")
+
+            first = self.plugin._enqueue_download_job(
+                "plugin:fsr4", "plugin_download_phase", first_operation
+            )
+            duplicate = self.plugin._enqueue_download_job(
+                "plugin:fsr4", "plugin_download_phase", first_operation
+            )
+            self.assertEqual(first["job_id"], duplicate["job_id"])
+            release.set()
+            for _ in range(20):
+                await asyncio.sleep(0)
+                failed = (await self.plugin.get_download_jobs())[0]
+                if failed["status"] == "failed":
+                    break
+            self.assertEqual(failed["error"], "plugin_install_download_failed")
+            await self.plugin._unload()
+
+        asyncio.run(scenario())
+
     def test_trainer_resolver_accepts_only_official_fling_links(self):
         pages = {
             "search": '<a href="https://flingtrainer.com/trainer/portal-2-trainer/" rel="bookmark">Portal 2 Trainer</a>',

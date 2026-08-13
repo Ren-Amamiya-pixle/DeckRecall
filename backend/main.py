@@ -18,6 +18,7 @@ import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 try:
@@ -112,12 +113,21 @@ class Plugin:
         self.plugin_download_progress: dict[str, dict[str, Any]] = {}
         self.compat_download_progress: dict[str, dict[str, Any]] = {}
         self.self_update_progress: dict[str, Any] = {"phase": "self_update_download_phase", "percent": 0}
+        self.download_jobs: dict[str, dict[str, Any]] = {}
+        self.download_job_operations: dict[str, Callable[[], Awaitable[dict[str, Any]]]] = {}
+        self.active_download_targets: dict[str, str] = {}
+        self.download_queue: asyncio.Queue[str] | None = None
+        self.download_worker: asyncio.Task[None] | None = None
+        self.download_job_sequence = 0
         self.memory: Any = None
 
     async def _main(self) -> None:
         if decky: decky.logger.info("DeckRecall backend started")
 
     async def _unload(self) -> None:
+        if self.download_worker and not self.download_worker.done():
+            self.download_worker.cancel()
+            await asyncio.gather(self.download_worker, return_exceptions=True)
         if decky: decky.logger.info("DeckRecall backend stopped")
 
     async def get_diagnostics(self, app_id: str) -> dict[str, Any]:
@@ -228,6 +238,11 @@ class Plugin:
         finally:
             archive.unlink(missing_ok=True)
 
+    async def start_deckrecall_update(self) -> dict[str, Any]:
+        return self._enqueue_download_job(
+            "self_update", "self_update_download_phase", self.install_deckrecall_update
+        )
+
     async def prepare_trainer_download(self, game_name: str) -> dict[str, str]:
         """Resolve one official FLiNG attachment for Steam's native downloader.
 
@@ -309,7 +324,7 @@ class Plugin:
         if version not in TRAINER_COMPAT_RELEASES:
             raise ValueError("trainer_compat_invalid")
         release = TRAINER_COMPAT_RELEASES[version]
-        await self._emit_compat_progress(version, "compat_download_phase", 0)
+        await self._emit_compat_progress(version, "compat_download_phase", 1)
         archive = await self._download_compat_archive(version, release)
         try:
             await self._emit_compat_progress(version, "compat_verify_phase", 96)
@@ -330,6 +345,15 @@ class Plugin:
             return {"ok": True, "version": installed}
         finally:
             archive.unlink(missing_ok=True)
+
+    async def start_trainer_compat_install(self, version: str) -> dict[str, Any]:
+        if version not in TRAINER_COMPAT_RELEASES:
+            raise ValueError("trainer_compat_invalid")
+        return self._enqueue_download_job(
+            f"compat:{version}",
+            "compat_download_phase",
+            lambda: self.install_trainer_compat(version),
+        )
 
     async def get_trainer_compat_status(self) -> dict[str, Any]:
         destination = self._compatibilitytools_dir()
@@ -361,6 +385,15 @@ class Plugin:
             return {"ok": True, "plugin": plugin_id}
         finally:
             archive.unlink(missing_ok=True)
+
+    async def start_chinese_plugin_install(self, plugin_id: str) -> dict[str, Any]:
+        if plugin_id not in CHINESE_PLUGIN_RELEASES:
+            raise ValueError("plugin_install_invalid")
+        return self._enqueue_download_job(
+            f"plugin:{plugin_id}",
+            "plugin_download_phase",
+            lambda: self.install_chinese_plugin(plugin_id),
+        )
 
     async def _plugin_archive(self, release: dict[str, Any], plugin_id: str) -> Path:
         bundled = release.get("bundled")
@@ -428,7 +461,7 @@ class Plugin:
         documents.mkdir(parents=True, exist_ok=True)
         if documents.is_symlink() or not documents.is_dir():
             raise ValueError("trainer_documents_unavailable")
-        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.1"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.3"})
         temporary: Path | None = None
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
@@ -482,7 +515,7 @@ class Plugin:
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme != "https" or parsed.hostname != "flingtrainer.com":
             raise ValueError("trainer_search_invalid")
-        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.1"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 DeckRecall/0.3.3"})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 final = urllib.parse.urlparse(response.geturl())
@@ -502,26 +535,117 @@ class Plugin:
             raise ValueError("plugin_install_invalid")
         return dict(self.plugin_download_progress.get(plugin_id, {"phase": "plugin_download_phase", "percent": 0}))
 
+    async def get_trainer_compat_progress(self, version: str) -> dict[str, Any]:
+        if version not in TRAINER_COMPAT_RELEASES:
+            raise ValueError("trainer_compat_invalid")
+        return dict(self.compat_download_progress.get(version, {"phase": "compat_download_phase", "percent": 0}))
+
+    async def get_deckrecall_update_progress(self) -> dict[str, Any]:
+        return dict(self.self_update_progress)
+
+    async def get_download_jobs(self) -> list[dict[str, Any]]:
+        return [dict(job) for job in self.download_jobs.values()]
+
+    async def clear_download_job(self, job_id: str) -> dict[str, Any]:
+        job = self.download_jobs.get(job_id)
+        if not job:
+            raise ValueError("download_job_invalid")
+        if job["status"] not in {"done", "failed"}:
+            raise ValueError("download_job_active")
+        self.download_jobs.pop(job_id, None)
+        self.download_job_operations.pop(job_id, None)
+        await self._emit_download_jobs()
+        return {"ok": True}
+
+    def _enqueue_download_job(
+        self,
+        target: str,
+        phase: str,
+        operation: Callable[[], Awaitable[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        active_id = self.active_download_targets.get(target)
+        if active_id and active_id in self.download_jobs:
+            return dict(self.download_jobs[active_id])
+        self.download_job_sequence += 1
+        job_id = f"{int(time.time() * 1000)}-{self.download_job_sequence}"
+        job = {
+            "job_id": job_id,
+            "target": target,
+            "status": "queued",
+            "phase": phase,
+            "percent": 0,
+            "error": "",
+        }
+        self.download_jobs[job_id] = job
+        self.download_job_operations[job_id] = operation
+        self.active_download_targets[target] = job_id
+        if self.download_queue is None:
+            self.download_queue = asyncio.Queue()
+        self.download_queue.put_nowait(job_id)
+        if self.download_worker is None or self.download_worker.done():
+            self.download_worker = asyncio.create_task(self._run_download_jobs())
+        asyncio.create_task(self._emit_download_jobs())
+        return dict(job)
+
+    async def _run_download_jobs(self) -> None:
+        assert self.download_queue is not None
+        while True:
+            job_id = await self.download_queue.get()
+            job = self.download_jobs.get(job_id)
+            operation = self.download_job_operations.get(job_id)
+            if not job or not operation:
+                continue
+            job["status"] = "running"
+            await self._emit_download_jobs()
+            try:
+                await operation()
+                job.update(status="done", percent=100, error="")
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                job.update(status="failed", error=str(error) or "backend_error")
+                if decky:
+                    decky.logger.exception(f"DeckRecall download job {job_id} failed")
+            finally:
+                self.download_job_operations.pop(job_id, None)
+                if self.active_download_targets.get(job["target"]) == job_id:
+                    self.active_download_targets.pop(job["target"], None)
+                await self._emit_download_jobs()
+
+    async def _emit_download_jobs(self) -> None:
+        if decky:
+            await decky.emit("download_jobs_changed", [dict(job) for job in self.download_jobs.values()])
+
+    async def _update_download_job(self, target: str, phase: str, percent: int) -> None:
+        job_id = self.active_download_targets.get(target)
+        job = self.download_jobs.get(job_id) if job_id else None
+        if job:
+            job.update(phase=phase, percent=max(0, min(100, int(percent))))
+            await self._emit_download_jobs()
+
     def _record_plugin_progress(self, plugin_id: str, phase: str, percent: int) -> dict[str, Any]:
         progress = {"phase": phase, "percent": max(0, min(100, int(percent)))}
         self.plugin_download_progress[plugin_id] = progress
         return progress
 
     async def _emit_plugin_progress(self, plugin_id: str, phase: str, percent: int) -> None:
-        """Emit from Decky's event loop, matching working Decky download plugins."""
+        """Persist progress and publish the backend-owned job snapshot."""
         progress = self._record_plugin_progress(plugin_id, phase, percent)
+        await self._update_download_job(f"plugin:{plugin_id}", progress["phase"], progress["percent"])
         if decky:
             await decky.emit("plugin_install_progress", plugin_id, progress["phase"], progress["percent"])
 
     async def _emit_compat_progress(self, version: str, phase: str, percent: int) -> None:
         progress = {"phase": phase, "percent": max(0, min(100, int(percent)))}
         self.compat_download_progress[version] = progress
+        await self._update_download_job(f"compat:{version}", progress["phase"], progress["percent"])
         if decky:
             await decky.emit("trainer_compat_progress", version, progress["phase"], progress["percent"])
 
     async def _emit_self_update_progress(self, phase: str, percent: int) -> None:
         progress = {"phase": phase, "percent": max(0, min(100, int(percent)))}
         self.self_update_progress = progress
+        await self._update_download_job("self_update", progress["phase"], progress["percent"])
         if decky:
             await decky.emit("deckrecall_update_progress", progress["phase"], progress["percent"])
 

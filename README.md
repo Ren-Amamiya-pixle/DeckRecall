@@ -32,6 +32,7 @@ An independent [Decky Loader](https://decky.xyz/) plugin for SteamOS that rememb
 - DeckRecall always provides native SteamOS install/update actions for Proton Experimental (Steam app 1493710) and Proton 10.0 (Steam app 3658110), even before the compatibility-tool list has loaded. Steam remains responsible for licensing, storage selection, download progress, updates, and integrity checks.
 - GE-Proton is third-party software. DeckRecall reads the author's newest GitHub Release SHA-256 digest, falls back to a pinned verified version if the API is unavailable, uses the toolbox's fixed GitHub mirror fallback list for the archive, and safely installs it to Steam's `compatibilitytools.d` directory only after verification.
 - The trainer compatibility submenu provides four independent, checksummed upstream installs with separate progress: GE-Proton7-55, 8-25, 9-27, and 10-29. The UI labels 10-29 for current game/trainer versions and the other three for older versions, while still requiring per-game testing.
+- Large plugin, compatibility-layer, and DeckRecall-update downloads run in a serialized backend queue. Starting a download returns immediately; the backend remains the source of truth for queued/running/completed/failed state, so leaving and reopening the page restores live progress instead of pinning a long Decky RPC at 0%.
 
 ## Virtual memory
 

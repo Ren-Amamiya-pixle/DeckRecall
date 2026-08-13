@@ -16,6 +16,7 @@ export const ERROR_CODES = [
   "self_update_release_unavailable", "self_update_release_invalid", "self_update_download_failed",
   "self_update_checksum_failed", "self_update_archive_invalid", "self_update_version_mismatch",
   "self_update_target_invalid", "self_update_too_large", "self_update_install_failed",
+  "download_job_invalid", "download_job_active",
   "memory_steamos_required", "memory_device_unsupported", "memory_root_required",
   "memory_command_missing", "memory_read_failed", "memory_backend_unavailable",
   "memory_path_invalid", "memory_space_insufficient", "memory_battery_low",

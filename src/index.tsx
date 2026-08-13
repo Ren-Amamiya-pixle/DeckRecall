@@ -40,6 +40,13 @@ type RestoreResult = { ok: boolean; undo_id: string; diagnostics: Diagnostic };
 type GeProtonResult = { ok: boolean; version: string; source: string };
 type DeckRecallUpdateStatus = { installed_version: string; latest_version: string; update_available: boolean };
 type DeckRecallUpdateResult = DeckRecallUpdateStatus & { ok: boolean; updated: boolean; restart_required?: boolean };
+type DownloadProgress = { phase: string; percent: number };
+type DownloadJob = DownloadProgress & {
+  job_id: string;
+  target: string;
+  status: "queued" | "running" | "done" | "failed";
+  error: string;
+};
 type TrainerDownload = { url: string; title: string; directory: string };
 type TrainerSaved = { path: string; title: string; directory: string };
 type TrainerCompatVersion = "GE-Proton7-55" | "GE-Proton8-25" | "GE-Proton9-27" | "GE-Proton10-29";
@@ -57,13 +64,14 @@ const installLatestGeProton = callable<[], GeProtonResult>("install_latest_ge_pr
 const openProtontricks = callable<[appId: string], { ok: boolean }>("open_protontricks");
 const prepareTrainerDownload = callable<[gameName: string], TrainerDownload>("prepare_trainer_download");
 const downloadTrainerToDocuments = callable<[gameName: string], TrainerSaved>("download_trainer_to_documents");
-const installChinesePlugin = callable<[pluginId: "lsfg" | "fsr4"], { ok: boolean; plugin: string }>("install_chinese_plugin");
-const installTrainerCompat = callable<[version: TrainerCompatVersion], { ok: boolean; version: string }>("install_trainer_compat");
+const startChinesePluginInstall = callable<[pluginId: "lsfg" | "fsr4"], DownloadJob>("start_chinese_plugin_install");
+const startTrainerCompatInstall = callable<[version: TrainerCompatVersion], DownloadJob>("start_trainer_compat_install");
 const getMemoryStatus = callable<[], MemoryStatus>("get_memory_status");
 const applyRecommendedMemory = callable<[], { ok: boolean; profile: string; recommended_swap_gib: number; swap_path: string }>("apply_recommended_memory");
 const restoreMemoryTuning = callable<[], { ok: boolean }>("restore_memory_tuning");
 const getDeckRecallUpdateStatus = callable<[], DeckRecallUpdateStatus>("get_deckrecall_update_status");
-const installDeckRecallUpdate = callable<[], DeckRecallUpdateResult>("install_deckrecall_update");
+const startDeckRecallUpdate = callable<[], DownloadJob>("start_deckrecall_update");
+const getDownloadJobs = callable<[], DownloadJob[]>("get_download_jobs");
 
 
 const GAME_KEY = "deckRecall.lastGame";
@@ -445,6 +453,7 @@ function GameContent({ appId }: { appId: string }) {
   const [installingTrainerCompat, setInstallingTrainerCompat] = useState<TrainerCompatVersion>();
   const [trainerCompatProgress, setTrainerCompatProgress] = useState<Record<string, { phase: string; percent: number }>>({});
   const [trainerCompatStatus, setTrainerCompatStatus] = useState("");
+  const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
   const [launchPreview, setLaunchPreview] = useState("");
   const [autoSnapshot, setAutoSnapshot] = useState(() => storageGet(AUTO_SNAPSHOT_KEY) !== "false");
 
@@ -642,12 +651,11 @@ function GameContent({ appId }: { appId: string }) {
     setPluginInstallStatus("");
     setPluginInstallProgress({ phase: "plugin_download_phase", percent: 0 });
     try {
-      await installChinesePlugin(kind);
-      setPluginInstallStatus(t("pluginInstallComplete"));
+      await startChinesePluginInstall(kind);
+      setDownloadJobs(await getDownloadJobs());
     } catch (nextError) {
       console.warn("[DeckRecall] Could not install Chinese plugin", nextError);
       setPluginInstallStatus(t(normalizeError(nextError)));
-    } finally {
       setRequestingPluginInstall(undefined);
     }
   };
@@ -682,14 +690,57 @@ function GameContent({ appId }: { appId: string }) {
     setTrainerCompatStatus("");
     setTrainerCompatProgress((current) => ({ ...current, [version]: { phase: "compat_download_phase", percent: 0 } }));
     try {
-      const result = await installTrainerCompat(version);
-      setTrainerCompatStatus(t("trainerCompatInstalled", { version: result.version }));
+      await startTrainerCompatInstall(version);
+      setDownloadJobs(await getDownloadJobs());
     } catch (nextError) {
       setTrainerCompatStatus(t(normalizeError(nextError)));
-    } finally {
       setInstallingTrainerCompat(undefined);
     }
   };
+
+  useEffect(() => {
+    void getDownloadJobs().then(setDownloadJobs).catch((nextError) => {
+      console.warn("[DeckRecall] Could not hydrate download queue", nextError);
+    });
+    const listener = addEventListener<[jobs: DownloadJob[]]>("download_jobs_changed", setDownloadJobs);
+    return () => removeEventListener("download_jobs_changed", listener);
+  }, []);
+
+  useEffect(() => {
+    const activePlugin = [...downloadJobs].reverse().find((job) =>
+      job.target.startsWith("plugin:") && (job.status === "queued" || job.status === "running"));
+    if (activePlugin) {
+      const kind = activePlugin.target.slice("plugin:".length);
+      if (kind === "lsfg" || kind === "fsr4") {
+        setRequestingPluginInstall(kind);
+        setPluginInstallProgress({
+          phase: activePlugin.status === "queued" ? "download_queued_phase" : activePlugin.phase,
+          percent: activePlugin.percent,
+        });
+      }
+    } else if (requestingPluginInstall) {
+      const completed = [...downloadJobs].reverse().find((job) => job.target === `plugin:${requestingPluginInstall}`);
+      if (completed?.status === "done") setPluginInstallStatus(t("pluginInstallComplete"));
+      if (completed?.status === "failed") setPluginInstallStatus(t(normalizeError(new Error(completed.error))));
+      if (completed) setRequestingPluginInstall(undefined);
+    }
+
+    const activeCompat = [...downloadJobs].reverse().find((job) =>
+      job.target.startsWith("compat:") && (job.status === "queued" || job.status === "running"));
+    if (activeCompat) {
+      const version = activeCompat.target.slice("compat:".length) as TrainerCompatVersion;
+      setInstallingTrainerCompat(version);
+      setTrainerCompatProgress((current) => ({ ...current, [version]: {
+        phase: activeCompat.status === "queued" ? "download_queued_phase" : activeCompat.phase,
+        percent: activeCompat.percent,
+      } }));
+    } else if (installingTrainerCompat) {
+      const completed = [...downloadJobs].reverse().find((job) => job.target === `compat:${installingTrainerCompat}`);
+      if (completed?.status === "done") setTrainerCompatStatus(t("trainerCompatInstalled", { version: installingTrainerCompat }));
+      if (completed?.status === "failed") setTrainerCompatStatus(t(normalizeError(new Error(completed.error))));
+      if (completed) setInstallingTrainerCompat(undefined);
+    }
+  }, [downloadJobs]);
 
   useEffect(() => {
     const listener = addEventListener<[kind: string, phase: string, percent: number]>(
@@ -1010,6 +1061,8 @@ function QuickAccessContent() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [updateFeedback, setUpdateFeedback] = useState("");
+  const [updateProgress, setUpdateProgress] = useState<DownloadProgress>();
+  const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
 
   const checkDeckRecallUpdate = async () => {
     setCheckingUpdate(true);
@@ -1031,27 +1084,46 @@ function QuickAccessContent() {
   const updateDeckRecall = async () => {
     setInstallingUpdate(true);
     setUpdateFeedback("");
+    setUpdateProgress({ phase: "self_update_download_phase", percent: 0 });
     try {
-      const result = await withTimeout(installDeckRecallUpdate(), 30 * 60 * 1000);
-      setUpdateStatus({
-        installed_version: result.updated ? result.latest_version : result.installed_version,
-        latest_version: result.latest_version,
-        update_available: false,
-      });
-      const message = t(result.updated ? "deckrecallUpdated" : "deckrecallUpToDate", {
-        installed: result.updated ? result.latest_version : result.installed_version,
-        latest: result.latest_version,
-      });
-      setUpdateFeedback(message);
-      toaster.toast({ title: "DeckRecall", body: message, duration: 7000, showToast: true });
+      await startDeckRecallUpdate();
+      setDownloadJobs(await getDownloadJobs());
     } catch (error) {
       const code = normalizeError(error);
       setUpdateFeedback(t(code));
       toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
-    } finally {
       setInstallingUpdate(false);
     }
   };
+
+  useEffect(() => {
+    void getDownloadJobs().then(setDownloadJobs).catch((error) => {
+      console.warn("[DeckRecall] Could not hydrate download queue", error);
+    });
+    const listener = addEventListener<[jobs: DownloadJob[]]>("download_jobs_changed", setDownloadJobs);
+    return () => removeEventListener("download_jobs_changed", listener);
+  }, []);
+
+  useEffect(() => {
+    const updateJob = [...downloadJobs].reverse().find((job) => job.target === "self_update");
+    if (!updateJob) return;
+    setUpdateProgress({
+      phase: updateJob.status === "queued" ? "download_queued_phase" : updateJob.phase,
+      percent: updateJob.percent,
+    });
+    if (updateJob.status === "queued" || updateJob.status === "running") {
+      setInstallingUpdate(true);
+      return;
+    }
+    setInstallingUpdate(false);
+    if (updateJob.status === "done" && updateStatus) {
+      const message = t("deckrecallUpdated", { installed: updateStatus.latest_version, latest: updateStatus.latest_version });
+      setUpdateStatus({ ...updateStatus, installed_version: updateStatus.latest_version, update_available: false });
+      setUpdateFeedback(message);
+    } else if (updateJob.status === "failed") {
+      setUpdateFeedback(t(normalizeError(new Error(updateJob.error))));
+    }
+  }, [downloadJobs]);
 
   const requestOfficialProtonInstall = async (toolAppId: number, toolName: string) => {
     try {
@@ -1097,6 +1169,10 @@ function QuickAccessContent() {
           {installingUpdate ? t("deckrecallUpdating") : t("deckrecallInstallUpdate", { version: updateStatus.latest_version })}
         </ButtonItem>
       </PanelSectionRow>}
+      {installingUpdate && updateProgress && <PanelSectionRow><div style={{ width: "100%" }}>
+        <div style={{ marginBottom: "6px" }}>{t(updateProgress.phase)} {updateProgress.percent}%</div>
+        <div style={{ height: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.18)", overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.max(2, updateProgress.percent)}%`, background: "#67c1f5", transition: "width 0.25s ease" }} /></div>
+      </div></PanelSectionRow>}
       {updateFeedback && <PanelSectionRow><div style={{ color: "#7dd3fc", fontWeight: 600 }}>{updateFeedback}</div></PanelSectionRow>}
     </PanelSection>
     <PanelSection title={t("language")}>
