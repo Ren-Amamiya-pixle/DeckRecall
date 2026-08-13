@@ -1,6 +1,6 @@
 # DeckRecall
 
-DeckRecall 0.4.3 fixes GE-Proton installation and Protontricks under Decky Loader:
+DeckRecall 0.4.4 fixes GE-Proton installation and Protontricks under Decky Loader:
 
 - restores the host library path only for system `curl` subprocesses, avoiding `_MEI` OpenSSL conflicts on current SteamOS;
 - keeps the existing Gitee chunks, GitHub fallbacks, proxy settings, size limits, SHA-256 verification, extraction checks, and installation behavior unchanged.

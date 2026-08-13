@@ -6,6 +6,7 @@ import hashlib
 import html
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -1412,9 +1413,14 @@ class Plugin:
             for member in members:
                 target = Path(member.name)
                 if member.issym() or member.islnk():
-                    link_target = Path(member.linkname)
-                    resolved = Path(member.name).parent / link_target
-                    if link_target.is_absolute() or ".." in resolved.parts or not resolved.parts or resolved.parts[0] != root_name:
+                    if member.linkname.startswith("/"):
+                        raise ValueError("ge_proton_archive_invalid")
+                    raw_link = (
+                        member.linkname if member.islnk()
+                        else posixpath.join(posixpath.dirname(member.name), member.linkname)
+                    )
+                    resolved_link = posixpath.normpath(raw_link)
+                    if resolved_link == root_name or not resolved_link.startswith(f"{root_name}/"):
                         raise ValueError("ge_proton_archive_invalid")
                 if target.is_absolute() or ".." in target.parts or not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
                     raise ValueError("ge_proton_archive_invalid")

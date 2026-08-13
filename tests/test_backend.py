@@ -110,13 +110,21 @@ class BackendTests(unittest.TestCase):
             ):
                 entry = tarfile.TarInfo(name); entry.size = len(payload)
                 bundle.addfile(entry, io.BytesIO(payload))
-            link = tarfile.TarInfo("GE-Proton10-3/proton-link")
-            link.type = tarfile.SYMTYPE; link.linkname = "proton"
+            link = tarfile.TarInfo("GE-Proton10-3/deep/path/proton-link")
+            link.type = tarfile.SYMTYPE; link.linkname = "../../proton"
             bundle.addfile(link)
         self.assertEqual(
             self.plugin._safe_extract_ge(linked, self.plugin.steam_root / "compatibilitytools.d", linked.name),
             "GE-Proton10-3",
         )
+
+        escape = Path(self.temp.name) / "GE-Proton10-4.tar.gz"
+        with tarfile.open(escape, "w:gz") as bundle:
+            link = tarfile.TarInfo("GE-Proton10-4/deep/link")
+            link.type = tarfile.SYMTYPE; link.linkname = "../../../etc/passwd"
+            bundle.addfile(link)
+        with self.assertRaisesRegex(ValueError, "ge_proton_archive_invalid"):
+            self.plugin._safe_extract_ge(escape, self.plugin.steam_root / "compatibilitytools.d", escape.name)
 
         evil = Path(self.temp.name) / "GE-Proton10-2.tar.gz"
         with tarfile.open(evil, "w:gz") as bundle:
