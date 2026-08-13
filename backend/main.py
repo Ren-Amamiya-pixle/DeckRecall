@@ -147,6 +147,7 @@ class Plugin:
         self.download_queue: asyncio.Queue[str] | None = None
         self.download_worker: asyncio.Task[None] | None = None
         self.download_job_sequence = 0
+        self.restart_after_queue = ""
         self.memory: Any = None
         self.exe_installs: Any = None
 
@@ -614,6 +615,7 @@ class Plugin:
                 self._safe_extract_ge, archive, destination, release["tag"]
             )
             self._event("0", "ge_proton_installed", {"version": installed})
+            self.restart_after_queue = "steam"
             return {"ok": True, "version": installed, "source": release["source"]}
         finally:
             archive.unlink(missing_ok=True)
@@ -642,6 +644,7 @@ class Plugin:
             )
             await self._emit_compat_progress(version, "compat_complete_phase", 100)
             self._event("0", "trainer_compat_installed", {"version": installed})
+            self.restart_after_queue = "steam"
             return {"ok": True, "version": installed}
         finally:
             archive.unlink(missing_ok=True)
@@ -682,6 +685,8 @@ class Plugin:
             await asyncio.to_thread(self._safe_install_plugin_archive, archive, release["directory"])
             await self._emit_plugin_progress(plugin_id, "plugin_complete_phase", 100)
             self._event("0", "plugin_installed", {"plugin": plugin_id})
+            if self.restart_after_queue != "steam":
+                self.restart_after_queue = "decky"
             return {"ok": True, "plugin": plugin_id}
         finally:
             archive.unlink(missing_ok=True)
@@ -694,6 +699,28 @@ class Plugin:
             "plugin_download_phase",
             lambda: self.install_chinese_plugin(plugin_id),
         )
+
+    async def restart_decky_loader(self) -> dict[str, bool]:
+        """Return the RPC result before restarting the service that hosts us."""
+        asyncio.create_task(self._restart_decky_loader_delayed())
+        return {"ok": True}
+
+    async def _restart_decky_loader_delayed(self) -> None:
+        await asyncio.sleep(1)
+        try:
+            await asyncio.to_thread(
+                subprocess.run,
+                ["systemctl", "restart", "plugin_loader.service"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=15,
+                check=False,
+                env=self._external_command_environment(),
+            )
+        except (OSError, subprocess.SubprocessError):
+            if decky:
+                decky.logger.exception("DeckRecall could not restart Decky Loader")
 
     async def _plugin_archive(self, release: dict[str, Any], plugin_id: str) -> Path:
         bundled = release.get("bundled")
@@ -911,6 +938,11 @@ class Plugin:
                 if self.active_download_targets.get(job["target"]) == job_id:
                     self.active_download_targets.pop(job["target"], None)
                 await self._emit_download_jobs()
+                if self.download_queue.empty() and self.restart_after_queue:
+                    restart = self.restart_after_queue
+                    self.restart_after_queue = ""
+                    if decky:
+                        await decky.emit("deckrecall_restart_required", restart)
 
     async def _emit_download_jobs(self) -> None:
         if decky:
