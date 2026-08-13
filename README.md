@@ -1,5 +1,13 @@
 # DeckRecall
 
+DeckRecall 0.4.1 fixes SteamOS downloads and the Windows EXE picker:
+
+- uses the system `curl` certificate store instead of Decky's broken embedded Python certificate chain;
+- downloads DeckRecall, Chinese plugin bundles, fixed trainer compatibility layers, and the latest GE-Proton from fixed Gitee manifests/chunks first, with vetted GitHub fallbacks;
+- verifies expected sizes and the complete upstream SHA-256 before any archive is installed;
+- moves the latest GE-Proton download into the persistent backend queue;
+- opens an EXE-only picker that accepts both Decky `path` and `realpath` results, and reports picker failures visibly.
+
 DeckRecall 0.4 adds a guided Windows EXE workflow for Steam Deck:
 
 - choose an installer EXE and run it as a Steam non-Steam shortcut with Proton;
@@ -40,7 +48,7 @@ An independent [Decky Loader](https://decky.xyz/) plugin for SteamOS that rememb
 
 - DeckRecall reads the compatibility tools Steam exposes for the selected game and offers Proton Experimental, Proton 10.0-4, installed GE-Proton versions, and Steam's automatic default.
 - DeckRecall always provides native SteamOS install/update actions for Proton Experimental (Steam app 1493710) and Proton 10.0 (Steam app 3658110), even before the compatibility-tool list has loaded. Steam remains responsible for licensing, storage selection, download progress, updates, and integrity checks.
-- GE-Proton is third-party software. DeckRecall reads the author's newest GitHub Release SHA-256 digest, falls back to a pinned verified version if the API is unavailable, uses the toolbox's fixed GitHub mirror fallback list for the archive, and safely installs it to Steam's `compatibilitytools.d` directory only after verification.
+- GE-Proton is third-party software. DeckRecall reads the author's newest GitHub Release SHA-256 digest, falls back to a pinned verified version if the API is unavailable, tries a fixed checksummed Gitee chunk mirror before the GitHub fallback list, and safely installs it to Steam's `compatibilitytools.d` directory only after verification.
 - The trainer compatibility submenu provides four independent, checksummed upstream installs with separate progress: GE-Proton7-55, 8-25, 9-27, and 10-29. The UI labels 10-29 for current game/trainer versions and the other three for older versions, while still requiring per-game testing.
 - Large plugin, compatibility-layer, and DeckRecall-update downloads run in a serialized backend queue. Starting a download returns immediately; the backend remains the source of truth for queued/running/completed/failed state, so leaving and reopening the page restores live progress instead of pinning a long Decky RPC at 0%.
 

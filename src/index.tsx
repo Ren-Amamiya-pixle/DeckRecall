@@ -56,6 +56,7 @@ type DownloadJob = DownloadProgress & {
   target: string;
   status: "queued" | "running" | "done" | "failed";
   error: string;
+  result?: GeProtonResult;
 };
 type TrainerDownload = { url: string; title: string; directory: string };
 type TrainerSaved = { path: string; title: string; directory: string };
@@ -71,7 +72,7 @@ const undoRestore = callable<[appId: string, undoId: string], { ok: boolean; dia
 const getEvents = callable<[appId: string], ActivityEvent[]>("get_events");
 const getLaunchProfile = callable<[appId: string], LaunchProfile>("get_launch_profile");
 const saveLaunchProfile = callable<[appId: string, profile: LaunchProfile], LaunchProfile>("save_launch_profile");
-const installLatestGeProton = callable<[], GeProtonResult>("install_latest_ge_proton");
+const startLatestGeProtonInstall = callable<[], DownloadJob>("start_latest_ge_proton_install");
 const openProtontricks = callable<[appId: string], { ok: boolean }>("open_protontricks");
 const prepareTrainerDownload = callable<[gameName: string], TrainerDownload>("prepare_trainer_download");
 const downloadTrainerToDocuments = callable<[gameName: string], TrainerSaved>("download_trainer_to_documents");
@@ -303,21 +304,16 @@ async function readLaunchOptions(appId: string): Promise<string> {
 }
 
 async function chooseExecutable(startPath: string): Promise<string | undefined> {
-  let result: { path?: string; realpath?: string };
-  try {
-    result = await openFilePicker(
-      FileSelectionType.FILE,
-      startPath || "/home/deck/Documents",
-      true,
-      true,
-      undefined,
-      undefined,
-      false,
-      true,
-    );
-  } catch {
-    return undefined;
-  }
+  const result = await openFilePicker(
+    FileSelectionType.FILE,
+    startPath || "/home/deck/Documents",
+    true,
+    false,
+    (file: File) => /\.(?:exe|bat)$/i.test(file.name),
+    ["exe", "bat"],
+    false,
+    false,
+  );
   const path = typeof result?.path === "string" ? result.path : typeof result?.realpath === "string" ? result.realpath : "";
   if (!/\.(?:exe|bat)$/i.test(path)) throw new Error("invalid_executable_path");
   return path;
@@ -654,11 +650,10 @@ function GameContent({ appId }: { appId: string }) {
     setInstallingGe(true);
     setGeStatus("");
     try {
-      const result = await installLatestGeProton();
-      setGeStatus(t("geProtonInstalled", { version: result.version }));
+      await startLatestGeProtonInstall();
+      setDownloadJobs(await getDownloadJobs());
     } catch (nextError) {
       setGeStatus(t(normalizeError(nextError)));
-    } finally {
       setInstallingGe(false);
     }
   };
@@ -756,6 +751,18 @@ function GameContent({ appId }: { appId: string }) {
       if (completed?.status === "done") setTrainerCompatStatus(t("trainerCompatInstalled", { version: installingTrainerCompat }));
       if (completed?.status === "failed") setTrainerCompatStatus(t(normalizeError(new Error(completed.error))));
       if (completed) setInstallingTrainerCompat(undefined);
+    }
+
+    const geJob = [...downloadJobs].reverse().find((job) => job.target === "ge_latest");
+    if (geJob?.status === "queued" || geJob?.status === "running") {
+      setInstallingGe(true);
+      setGeStatus(`${t(geJob.status === "queued" ? "download_queued_phase" : geJob.phase)} ${geJob.percent}%`);
+    } else if (geJob?.status === "done") {
+      setInstallingGe(false);
+      if (geJob.result?.version) setGeStatus(t("geProtonInstalled", { version: geJob.result.version }));
+    } else if (geJob?.status === "failed") {
+      setInstallingGe(false);
+      setGeStatus(t(normalizeError(new Error(geJob.error))));
     }
   }, [downloadJobs]);
 
@@ -1093,19 +1100,18 @@ function QuickAccessContent() {
   const [selectedGameExe, setSelectedGameExe] = useState("");
 
   const chooseAndRunExeInstaller = async () => {
-    Navigation.CloseSideMenus();
     setExeInstallBusy(true);
-    setExeInstallStatus("");
+    setExeInstallStatus(t("exePickerOpening"));
     try {
       const selected = await openFilePicker(
         FileSelectionType.FILE,
         "/home/deck/Downloads",
         true,
-        undefined,
-        /\.exe$/i,
-        undefined,
         false,
-        true,
+        (file: File) => /\.exe$/i.test(file.name),
+        ["exe"],
+        false,
+        false,
       );
       const installer = exeSelectionPath(selected);
       if (!installer) throw new Error("exe_install_file_invalid");
@@ -1152,19 +1158,18 @@ function QuickAccessContent() {
   };
 
   const chooseExtractedGameFolder = async () => {
-    Navigation.CloseSideMenus();
     setExeInstallBusy(true);
-    setExeInstallStatus("");
+    setExeInstallStatus(t("folderPickerOpening"));
     try {
       const selected = await openFilePicker(
         FileSelectionType.FOLDER,
         "/home/deck/Downloads",
-        true,
+        false,
         true,
         undefined,
         undefined,
         false,
-        true,
+        false,
       );
       const selectedPath = folderSelectionPath(selected);
       if (!selectedPath) throw new Error("exe_game_folder_invalid");
@@ -1177,7 +1182,9 @@ function QuickAccessContent() {
       setSelectedGameExe("");
       setExeInstallStatus(t("exeGameFolderSelected", { name: matched.name }));
     } catch (error) {
-      setExeInstallStatus(t(normalizeError(error)));
+      const code = normalizeError(error);
+      setExeInstallStatus(t(code));
+      toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
     } finally {
       setExeInstallBusy(false);
     }
@@ -1288,22 +1295,34 @@ function QuickAccessContent() {
 
   useEffect(() => {
     const updateJob = [...downloadJobs].reverse().find((job) => job.target === "self_update");
-    if (!updateJob) return;
-    setUpdateProgress({
-      phase: updateJob.status === "queued" ? "download_queued_phase" : updateJob.phase,
-      percent: updateJob.percent,
-    });
-    if (updateJob.status === "queued" || updateJob.status === "running") {
-      setInstallingUpdate(true);
-      return;
+    if (updateJob) {
+      setUpdateProgress({
+        phase: updateJob.status === "queued" ? "download_queued_phase" : updateJob.phase,
+        percent: updateJob.percent,
+      });
+      if (updateJob.status === "queued" || updateJob.status === "running") {
+        setInstallingUpdate(true);
+      } else {
+        setInstallingUpdate(false);
+        if (updateJob.status === "done" && updateStatus) {
+          const message = t("deckrecallUpdated", { installed: updateStatus.latest_version, latest: updateStatus.latest_version });
+          setUpdateStatus({ ...updateStatus, installed_version: updateStatus.latest_version, update_available: false });
+          setUpdateFeedback(message);
+        } else if (updateJob.status === "failed") {
+          setUpdateFeedback(t(normalizeError(new Error(updateJob.error))));
+        }
+      }
     }
-    setInstallingUpdate(false);
-    if (updateJob.status === "done" && updateStatus) {
-      const message = t("deckrecallUpdated", { installed: updateStatus.latest_version, latest: updateStatus.latest_version });
-      setUpdateStatus({ ...updateStatus, installed_version: updateStatus.latest_version, update_available: false });
-      setUpdateFeedback(message);
-    } else if (updateJob.status === "failed") {
-      setUpdateFeedback(t(normalizeError(new Error(updateJob.error))));
+    const geJob = [...downloadJobs].reverse().find((job) => job.target === "ge_latest");
+    if (geJob?.status === "queued" || geJob?.status === "running") {
+      setInstallingGe(true);
+      setGeStatus(`${t(geJob.status === "queued" ? "download_queued_phase" : geJob.phase)} ${geJob.percent}%`);
+    } else if (geJob?.status === "done") {
+      setInstallingGe(false);
+      if (geJob.result?.version) setGeStatus(t("geProtonInstalled", { version: geJob.result.version }));
+    } else if (geJob?.status === "failed") {
+      setInstallingGe(false);
+      setGeStatus(t(normalizeError(new Error(geJob.error))));
     }
   }, [downloadJobs]);
 
@@ -1327,14 +1346,12 @@ function QuickAccessContent() {
     setInstallingGe(true);
     setGeStatus("");
     try {
-      const result = await installLatestGeProton();
-      setGeStatus(t("geProtonInstalled", { version: result.version }));
-      toaster.toast({ title: "DeckRecall", body: t("geProtonInstalled", { version: result.version }), duration: 5000, showToast: true });
+      await startLatestGeProtonInstall();
+      setDownloadJobs(await getDownloadJobs());
     } catch (error) {
       const code = normalizeError(error);
       setGeStatus(t(code));
       toaster.toast({ title: "DeckRecall", body: t(code), duration: 5000, showToast: true });
-    } finally {
       setInstallingGe(false);
     }
   };

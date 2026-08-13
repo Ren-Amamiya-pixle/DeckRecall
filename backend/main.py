@@ -40,6 +40,18 @@ GE_RELEASE_API = "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/
 GE_FIXED_VERSION = "GE-Proton11-3"
 GE_FIXED_URL = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton11-3/GE-Proton11-3.tar.gz"
 GE_FIXED_SHA256 = "861c2edc8d40d051fb1e7a692deb953be52bd339c46d90f2b7dde50ddad91266"
+GE_FIXED_SIZE = 532524366
+GITEE_MIRROR_OWNER = "zliu9732-hub"
+GITEE_PRIMARY_REPO = "zhoukeer-toolbox-mirror"
+GITEE_SECONDARY_REPO = "zhoukeer-toolbox-mirror-2"
+GITEE_DECKRECALL_REPO = "zhoukeer-toolbox-mirror-3"
+GITEE_RAW_ORIGIN = f"https://gitee.com/{GITEE_MIRROR_OWNER}/"
+GITEE_CHUNK_SIZE = 8 * 1024 * 1024
+GITEE_ALLOWED_REPOS = {
+    GITEE_PRIMARY_REPO, GITEE_SECONDARY_REPO, GITEE_DECKRECALL_REPO,
+    "zhoukeer-toolbox-mirror-4", "zhoukeer-toolbox-mirror-5",
+    "zhoukeer-toolbox-mirror-6", "zhoukeer-toolbox-mirror-7",
+}
 # Same fixed HTTPS GitHub mirrors as the toolbox. They are transport fallbacks
 # only; every archive is checked against the author API SHA-256 digest.
 GE_MIRROR_PREFIXES = (
@@ -61,6 +73,8 @@ CHINESE_PLUGIN_RELEASES = {
         "sha256": "278d0fe9bc81c2f3c68e53efa00b66bbb3cbba07f0b7fa2937cf881426f2fe56",
         "directory": "Decky LSFG-VK",
         "size": 16437127,
+        "mirror_repo": GITEE_DECKRECALL_REPO,
+        "mirror_id": "deckrecall-lsfg-zh",
     },
     "fsr4": {
         "bundled": "assets/fsr4-zh.zip",
@@ -68,6 +82,8 @@ CHINESE_PLUGIN_RELEASES = {
         "sha256": "f578ea48296eb7b4a5645aeaef084f0e6368ec285b79f845183e13fb9c4d5e53",
         "directory": "Decky-Framegen",
         "size": 198763093,
+        "mirror_repo": GITEE_DECKRECALL_REPO,
+        "mirror_id": "deckrecall-fsr4-zh",
     },
 }
 
@@ -76,21 +92,32 @@ TRAINER_COMPAT_RELEASES = {
         "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton7-55/GE-Proton7-55.tar.gz",
         "size": 414899774,
         "sha512": "8fa9ad9d0e1957ced72cf48a0e5234203b4abec28bd039df8f57aea71d7fe8da5e1cbef0d208d324ebc77559b0e278abf54aa7f6c15bfcb4fb1a136de0652903",
+        "sha256": "ffbd03b40a5c8dafba53e45bd6551c132512ad6fcba9120e25f0d510d0cd0485",
+        "mirror_repo": "zhoukeer-toolbox-mirror-4",
+        "mirror_id": "ge-proton-trainer-7-55",
     },
     "GE-Proton8-25": {
         "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton8-25/GE-Proton8-25.tar.gz",
         "size": 428716716,
         "sha512": "287b10bad211e471772017da801089dae2a83a1da50a584b75e3c1c25339768e5a9f25c4cd0cf7db07aa6c5887abe3e8928cae835a5b21c58c95e5fd0dd3f65e",
+        "sha256": "b37160b27ab36e0068f73ab09ac0c936323cf934c6f36edb171cd642bd7ce18a",
+        "mirror_repo": "zhoukeer-toolbox-mirror-5",
+        "mirror_id": "ge-proton-trainer-8-25",
     },
     "GE-Proton9-27": {
         "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton9-27/GE-Proton9-27.tar.gz",
         "size": 488766224,
         "sha512": "86a2b2962a2509104201b3532bc829d058d666bc8220417f71bd4af660b6d05781e9f684b3982339d695a5fd4babe19e97ec42a82a78311faf99fc1257280623",
+        "sha256": "bbd3108ba8dcf173dd2a60ef4eb1b8d07e0fb3c9a1061b5b9310c5355c151937",
+        "mirror_repo": "zhoukeer-toolbox-mirror-6",
+        "mirror_id": "ge-proton-trainer-9-27",
     },
     "GE-Proton10-29": {
         "url": "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton10-29/GE-Proton10-29.tar.gz",
         "size": 514575201,
         "sha256": "29a42ff004e9e5c79e22fa9a0595490284167d4a2e7cabbe570b1f9c2f3295c0",
+        "mirror_repo": "zhoukeer-toolbox-mirror-7",
+        "mirror_id": "ge-proton-trainer-10-29",
     },
 }
 
@@ -121,6 +148,212 @@ class Plugin:
         self.download_job_sequence = 0
         self.memory: Any = None
         self.exe_installs: Any = None
+
+    @staticmethod
+    def _approved_https_url(url: str) -> bool:
+        """Keep every backend transfer inside the fixed release/mirror allowlist."""
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme != "https" or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            return False
+        if parsed.hostname == "api.github.com":
+            return parsed.path in {
+                "/repos/Ren-Amamiya-pixle/DeckRecall/releases/latest",
+                "/repos/GloriousEggroll/proton-ge-custom/releases/latest",
+            }
+        if parsed.hostname == "github.com":
+            return parsed.path.startswith((
+                "/Ren-Amamiya-pixle/DeckRecall/releases/download/",
+                "/GloriousEggroll/proton-ge-custom/releases/download/",
+            ))
+        if parsed.hostname == "gitee.com":
+            parts = parsed.path.strip("/").split("/")
+            return (
+                len(parts) >= 6 and parts[0] == GITEE_MIRROR_OWNER
+                and parts[1] in GITEE_ALLOWED_REPOS and parts[2:4] == ["raw", "main"]
+            )
+        mirror_hosts = {urllib.parse.urlparse(prefix).hostname for prefix in (*GE_MIRROR_PREFIXES, *PLUGIN_DOWNLOAD_PREFIXES) if prefix}
+        if parsed.hostname in mirror_hosts:
+            embedded = parsed.path.lstrip("/")
+            return embedded.startswith("https://github.com/") and Plugin._approved_https_url(embedded)
+        return False
+
+    @classmethod
+    def _curl_command(cls, url: str, destination: Path, maximum: int, timeout: int) -> list[str]:
+        if not cls._approved_https_url(url):
+            raise ValueError("download_source_invalid")
+        if maximum < 1:
+            raise ValueError("download_source_invalid")
+        return [
+            "curl", "--fail", "--location", "--silent", "--show-error",
+            "--proto", "=https", "--proto-redir", "=https",
+            "--connect-timeout", "8", "--max-time", str(timeout),
+            "--retry", "1", "--retry-delay", "1", "--retry-connrefused",
+            "--speed-limit", "1024", "--speed-time", "25",
+            "--max-filesize", str(maximum), "--user-agent", "DeckRecall",
+            "--output", str(destination), url,
+        ]
+
+    @classmethod
+    def _curl_download_sync(cls, url: str, destination: Path, maximum: int, timeout: int = 120) -> None:
+        try:
+            result = subprocess.run(
+                cls._curl_command(url, destination, maximum, timeout),
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=False, timeout=timeout + 5,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ValueError("download_transport_failed") from error
+        if result.returncode != 0 or not destination.is_file() or destination.stat().st_size > maximum:
+            raise ValueError("download_transport_failed")
+
+    @classmethod
+    def _curl_read_json(cls, url: str, maximum: int = 2 * 1024 * 1024) -> dict[str, Any]:
+        descriptor, name = tempfile.mkstemp(prefix="deckrecall-json-")
+        os.close(descriptor)
+        temporary = Path(name)
+        try:
+            cls._curl_download_sync(url, temporary, maximum, 30)
+            payload = json.loads(temporary.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("download_manifest_invalid")
+            return payload
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError("download_manifest_invalid") from error
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @classmethod
+    def _curl_read_text(cls, url: str, maximum: int = 2 * 1024 * 1024) -> str:
+        descriptor, name = tempfile.mkstemp(prefix="deckrecall-text-")
+        os.close(descriptor)
+        temporary = Path(name)
+        try:
+            cls._curl_download_sync(url, temporary, maximum, 30)
+            return temporary.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise ValueError("download_manifest_invalid") from error
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @staticmethod
+    def _parse_gitee_manifest(text: str) -> dict[str, str]:
+        fields: dict[str, str] = {}
+        allowed = {
+            "id", "name", "version", "file", "source_url", "sha256", "size",
+            "chunks", "chunk_size", "repo1", "repo2", "parts_repo1",
+        }
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, separator, value = line.partition("=")
+            if not separator or key not in allowed or key in fields or not value:
+                raise ValueError("download_manifest_invalid")
+            fields[key] = value
+        required = {"id", "version", "file", "source_url", "sha256", "size", "chunks", "chunk_size"}
+        if not required.issubset(fields) or not re.fullmatch(r"[0-9a-f]{64}", fields["sha256"]):
+            raise ValueError("download_manifest_invalid")
+        for key in ("size", "chunks", "chunk_size", "parts_repo1"):
+            if key in fields and not fields[key].isdigit():
+                raise ValueError("download_manifest_invalid")
+        return fields
+
+    async def _curl_download_progress(
+        self, url: str, destination: Path, expected_size: int, maximum: int,
+        progress: Callable[[int], Awaitable[None]] | None = None,
+    ) -> None:
+        process: subprocess.Popen[bytes] | None = None
+        try:
+            process = subprocess.Popen(
+                self._curl_command(url, destination, maximum, 1200),
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            )
+            last_size = -1
+            while process.poll() is None:
+                current = destination.stat().st_size if destination.exists() else 0
+                if progress and current != last_size:
+                    last_size = current
+                    await progress(current)
+                await asyncio.sleep(0.25)
+            stderr = process.stderr.read() if process.stderr else b""
+            if process.returncode != 0:
+                raise ValueError("download_transport_failed") from RuntimeError(stderr.decode("utf-8", errors="replace")[:500])
+            actual_size = destination.stat().st_size if destination.is_file() else -1
+            if actual_size != expected_size or actual_size > maximum:
+                raise ValueError("download_size_mismatch")
+            if progress:
+                await progress(actual_size)
+        except OSError as error:
+            raise ValueError("download_transport_failed") from error
+        finally:
+            if process and process.poll() is None:
+                process.kill()
+                process.wait()
+
+    async def _download_gitee_mirror(
+        self, repo: str, mirror_id: str, expected_url: str, expected_sha256: str,
+        expected_size: int, suffix: str,
+        progress: Callable[[int], Awaitable[None]] | None = None,
+    ) -> Path:
+        if repo not in GITEE_ALLOWED_REPOS or not re.fullmatch(r"[a-z0-9-]+", mirror_id):
+            raise ValueError("download_manifest_invalid")
+        base = f"{GITEE_RAW_ORIGIN}{repo}/raw/main/{mirror_id}"
+        manifest = self._parse_gitee_manifest(await asyncio.to_thread(self._curl_read_text, f"{base}/latest.txt"))
+        if (
+            manifest["id"] != mirror_id or manifest["source_url"] != expected_url
+            or manifest["sha256"] != expected_sha256.lower()
+            or int(manifest["size"]) != expected_size
+        ):
+            raise ValueError("download_manifest_mismatch")
+        chunks, chunk_size = int(manifest["chunks"]), int(manifest["chunk_size"])
+        if chunks < 0 or chunks > 256 or (chunks and chunk_size != GITEE_CHUNK_SIZE):
+            raise ValueError("download_manifest_invalid")
+        version, filename = manifest["version"], manifest["file"]
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", version) or not re.fullmatch(r"[A-Za-z0-9._-]+", filename):
+            raise ValueError("download_manifest_invalid")
+        descriptor, name = tempfile.mkstemp(dir=self.data_root, prefix=f"{mirror_id}-", suffix=suffix)
+        os.close(descriptor)
+        destination = Path(name)
+        try:
+            if chunks == 0:
+                await self._curl_download_progress(
+                    f"{base}/{version}/{filename}", destination, expected_size, expected_size, progress
+                )
+            else:
+                repo1 = manifest.get("repo1", repo)
+                repo2 = manifest.get("repo2", repo)
+                parts_repo1 = int(manifest.get("parts_repo1", str(chunks)))
+                if repo1 not in GITEE_ALLOWED_REPOS or repo2 not in GITEE_ALLOWED_REPOS or not 0 <= parts_repo1 <= chunks:
+                    raise ValueError("download_manifest_invalid")
+                downloaded = 0
+                with destination.open("wb") as output:
+                    for index in range(1, chunks + 1):
+                        selected_repo = repo1 if index <= parts_repo1 else repo2
+                        part_size = min(chunk_size, expected_size - downloaded)
+                        descriptor, part_name = tempfile.mkstemp(dir=self.data_root, prefix=f"{mirror_id}-part-")
+                        os.close(descriptor)
+                        part = Path(part_name)
+                        try:
+                            async def part_progress(current: int, base_bytes: int = downloaded) -> None:
+                                if progress:
+                                    await progress(base_bytes + current)
+                            part_url = (
+                                f"{GITEE_RAW_ORIGIN}{selected_repo}/raw/main/{mirror_id}/"
+                                f"{version}/part.{index:04d}"
+                            )
+                            await self._curl_download_progress(part_url, part, part_size, chunk_size, part_progress)
+                            with part.open("rb") as source:
+                                shutil.copyfileobj(source, output, 1024 * 1024)
+                            downloaded += part_size
+                        finally:
+                            part.unlink(missing_ok=True)
+                if downloaded != expected_size:
+                    raise ValueError("download_size_mismatch")
+            if await asyncio.to_thread(self._hash, destination) != expected_sha256.lower():
+                raise ValueError("download_checksum_failed")
+            return destination
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
 
     async def _main(self) -> None:
         if decky: decky.logger.info("DeckRecall backend started")
@@ -357,8 +590,9 @@ class Plugin:
 
     async def install_latest_ge_proton(self) -> dict[str, Any]:
         """Download, verify and install the latest author-published GE-Proton."""
-        release = self._ge_release()
-        archive = self._download_ge_asset(release["asset_url"], release["asset_name"])
+        release = await asyncio.to_thread(self._ge_release)
+        await self._update_download_job("ge_latest", "compat_download_phase", 1)
+        archive = await self._download_latest_ge_archive(release)
         try:
             if self._hash(archive).lower() != release["sha256"].lower():
                 raise ValueError("ge_proton_checksum_failed")
@@ -369,6 +603,11 @@ class Plugin:
         finally:
             archive.unlink(missing_ok=True)
 
+    async def start_latest_ge_proton_install(self) -> dict[str, Any]:
+        return self._enqueue_download_job(
+            "ge_latest", "compat_download_phase", self.install_latest_ge_proton
+        )
+
     async def install_trainer_compat(self, version: str) -> dict[str, Any]:
         """Install one independently selected, fixed upstream GE-Proton release."""
         if version not in TRAINER_COMPAT_RELEASES:
@@ -378,12 +617,8 @@ class Plugin:
         archive = await self._download_compat_archive(version, release)
         try:
             await self._emit_compat_progress(version, "compat_verify_phase", 96)
-            if "sha256" in release:
-                actual = await asyncio.to_thread(self._hash, archive)
-                expected = release["sha256"]
-            else:
-                actual = await asyncio.to_thread(self._hash_algorithm, archive, "sha512")
-                expected = release["sha512"]
+            actual = await asyncio.to_thread(self._hash, archive)
+            expected = release["sha256"]
             if actual.lower() != expected:
                 raise ValueError("ge_proton_checksum_failed")
             await self._emit_compat_progress(version, "compat_install_phase", 98)
@@ -648,8 +883,8 @@ class Plugin:
             job["status"] = "running"
             await self._emit_download_jobs()
             try:
-                await operation()
-                job.update(status="done", percent=100, error="")
+                result = await operation()
+                job.update(status="done", percent=100, error="", result=result)
             except asyncio.CancelledError:
                 raise
             except Exception as error:
@@ -721,13 +956,8 @@ class Plugin:
             raise ValueError("self_update_installed_version_invalid") from error
 
     def _deckrecall_release(self) -> dict[str, Any]:
-        request = urllib.request.Request(
-            DECKRECALL_RELEASE_API,
-            headers={"Accept": "application/vnd.github+json", "User-Agent": "DeckRecall"},
-        )
         try:
-            with urllib.request.urlopen(request, timeout=20) as response:
-                payload = json.loads(response.read(2 * 1024 * 1024).decode("utf-8"))
+            payload = self._curl_read_json(DECKRECALL_RELEASE_API)
             if not isinstance(payload, dict) or payload.get("draft") is True or payload.get("prerelease") is True:
                 raise ValueError()
             tag = payload.get("tag_name")
@@ -759,7 +989,7 @@ class Plugin:
                 "sha256": match.group(1).lower(),
                 "size": size,
             }
-        except (OSError, urllib.error.URLError, json.JSONDecodeError, ValueError) as error:
+        except (OSError, json.JSONDecodeError, ValueError) as error:
             if isinstance(error, ValueError) and str(error) == "self_update_release_invalid":
                 raise
             raise ValueError("self_update_release_unavailable") from error
@@ -779,6 +1009,17 @@ class Plugin:
 
     async def _download_deckrecall_update_archive(self, release: dict[str, Any]) -> Path:
         last_error: Exception | None = None
+        async def progress(downloaded: int) -> None:
+            await self._emit_self_update_progress(
+                "self_update_download_phase", min(95, downloaded * 95 // int(release["size"]))
+            )
+        try:
+            return await self._download_gitee_mirror(
+                GITEE_DECKRECALL_REPO, "deckrecall", release["url"], release["sha256"],
+                int(release["size"]), ".zip", progress,
+            )
+        except ValueError as error:
+            last_error = error
         for prefix in PLUGIN_DOWNLOAD_PREFIXES:
             candidate = release["url"] if not prefix else prefix + release["url"]
             descriptor, temporary_name = tempfile.mkstemp(
@@ -794,63 +1035,22 @@ class Plugin:
                 temporary.unlink(missing_ok=True)
                 if str(error) == "self_update_too_large":
                     raise
-            except (OSError, urllib.error.URLError) as error:
+            except (OSError, ValueError) as error:
                 last_error = error
                 temporary.unlink(missing_ok=True)
         raise ValueError("self_update_download_failed") from last_error
 
     async def _download_self_update_source(self, url: str, destination: Path, expected_size: int) -> None:
-        downloaded = 0
-        stalls = 0
-        last_percent = -1
-        last_error: Exception | None = None
-        while downloaded < expected_size:
-            progress_before = downloaded
-            headers = {"User-Agent": "DeckRecall"}
-            if downloaded:
-                headers["Range"] = f"bytes={downloaded}-"
-            response: Any = None
-            try:
-                response = await asyncio.to_thread(
-                    urllib.request.urlopen,
-                    urllib.request.Request(url, headers=headers),
-                    None,
-                    PLUGIN_DOWNLOAD_STALL_TIMEOUT,
-                )
-                resuming = downloaded > 0 and getattr(response, "status", 200) == 206
-                if downloaded and not resuming:
-                    downloaded = 0
-                with destination.open("ab" if resuming else "wb") as output:
-                    while True:
-                        chunk = await asyncio.to_thread(response.read, PLUGIN_DOWNLOAD_CHUNK_SIZE)
-                        if not chunk:
-                            break
-                        output.write(chunk)
-                        downloaded += len(chunk)
-                        if downloaded > MAX_PLUGIN_ARCHIVE_SIZE:
-                            raise ValueError("self_update_too_large")
-                        percent = min(95, downloaded * 95 // expected_size)
-                        if percent != last_percent:
-                            last_percent = percent
-                            await self._emit_self_update_progress("self_update_download_phase", percent)
-                if downloaded == expected_size:
-                    return
-                if downloaded > expected_size:
-                    raise ValueError("self_update_download_failed")
-            except ValueError:
-                raise
-            except (OSError, urllib.error.URLError, TimeoutError) as error:
-                last_error = error
-            finally:
-                if response is not None:
-                    await asyncio.to_thread(response.close)
-            if downloaded > progress_before:
-                stalls = 0
-            else:
-                stalls += 1
-                if stalls >= PLUGIN_DOWNLOAD_MAX_STALLS:
-                    raise ValueError("self_update_download_failed") from last_error
-                await asyncio.sleep(min(2 ** stalls, 10))
+        async def progress(downloaded: int) -> None:
+            await self._emit_self_update_progress(
+                "self_update_download_phase", min(95, downloaded * 95 // expected_size)
+            )
+        try:
+            await self._curl_download_progress(
+                url, destination, expected_size, MAX_PLUGIN_ARCHIVE_SIZE, progress
+            )
+        except ValueError as error:
+            raise ValueError("self_update_download_failed") from error
 
     def _safe_install_deckrecall_archive(self, archive: Path, expected_version: str) -> None:
         target = self.plugin_dir
@@ -918,6 +1118,17 @@ class Plugin:
     async def _download_compat_archive(self, version: str, release: dict[str, Any]) -> Path:
         expected_size = int(release["size"])
         last_error: Exception | None = None
+        async def progress(downloaded: int) -> None:
+            await self._emit_compat_progress(
+                version, "compat_download_phase", min(95, downloaded * 95 // expected_size)
+            )
+        try:
+            return await self._download_gitee_mirror(
+                str(release["mirror_repo"]), str(release["mirror_id"]),
+                str(release["url"]), str(release["sha256"]), expected_size, ".tar.gz", progress,
+            )
+        except ValueError as error:
+            last_error = error
         for prefix in GE_MIRROR_PREFIXES:
             candidate = release["url"] if not prefix else prefix + release["url"]
             descriptor, temporary_name = tempfile.mkstemp(dir=self.data_root, prefix=f"{version}-", suffix=".tar.gz")
@@ -931,34 +1142,20 @@ class Plugin:
                 temporary.unlink(missing_ok=True)
                 if str(error) == "ge_proton_download_too_large":
                     raise
-            except (OSError, urllib.error.URLError) as error:
+            except (OSError, ValueError) as error:
                 last_error = error
                 temporary.unlink(missing_ok=True)
         raise ValueError("ge_proton_download_failed") from last_error
 
     async def _download_compat_source(self, url: str, destination: Path, version: str, expected_size: int) -> None:
-        request = urllib.request.Request(url, headers={"User-Agent": "DeckRecall"})
-        response: Any = await asyncio.to_thread(urllib.request.urlopen, request, None, 60)
-        downloaded = 0
-        last_percent = -1
         try:
-            with destination.open("wb") as output:
-                while True:
-                    chunk = await asyncio.to_thread(response.read, 1024 * 1024)
-                    if not chunk:
-                        break
-                    output.write(chunk)
-                    downloaded += len(chunk)
-                    if downloaded > MAX_GE_ARCHIVE_SIZE:
-                        raise ValueError("ge_proton_download_too_large")
-                    percent = min(95, downloaded * 95 // expected_size)
-                    if percent != last_percent:
-                        last_percent = percent
-                        await self._emit_compat_progress(version, "compat_download_phase", percent)
-        finally:
-            await asyncio.to_thread(response.close)
-        if downloaded != expected_size:
-            raise ValueError("ge_proton_download_failed")
+            async def progress(downloaded: int) -> None:
+                await self._emit_compat_progress(
+                    version, "compat_download_phase", min(95, downloaded * 95 // expected_size)
+                )
+            await self._curl_download_progress(url, destination, expected_size, MAX_GE_ARCHIVE_SIZE, progress)
+        except ValueError as error:
+            raise ValueError("ge_proton_download_failed") from error
 
     @staticmethod
     def _hash_algorithm(path: Path, algorithm: str) -> str:
@@ -976,8 +1173,7 @@ class Plugin:
 
     def _ge_release(self) -> dict[str, str]:
         try:
-            with urllib.request.urlopen(urllib.request.Request(GE_RELEASE_API, headers={"Accept": "application/vnd.github+json", "User-Agent": "DeckRecall"}), timeout=20) as response:
-                payload = json.loads(response.read(2 * 1024 * 1024).decode("utf-8"))
+            payload = self._curl_read_json(GE_RELEASE_API)
             if not isinstance(payload, dict) or not isinstance(payload.get("tag_name"), str): raise ValueError()
             tag = payload["tag_name"]
             if not re.fullmatch(r"GE-Proton[0-9]+-[0-9]+", tag): raise ValueError()
@@ -985,17 +1181,56 @@ class Plugin:
             if not isinstance(assets, list): raise ValueError()
             archive = next((item for item in assets if isinstance(item, dict) and item.get("name") == f"{tag}.tar.gz"), None)
             if not isinstance(archive, dict): raise ValueError()
-            asset_url, digest = archive.get("browser_download_url"), archive.get("digest")
-            if not isinstance(asset_url, str) or not isinstance(digest, str) or not asset_url.startswith("https://github.com/"):
+            asset_url, digest, size = archive.get("browser_download_url"), archive.get("digest"), archive.get("size")
+            if not isinstance(asset_url, str) or not isinstance(digest, str) or not isinstance(size, int) or not asset_url.startswith("https://github.com/"):
                 raise ValueError()
             match = re.fullmatch(r"sha256:([0-9a-fA-F]{64})", digest)
             if not match: raise ValueError()
-            return {"tag": tag, "asset_name": f"{tag}.tar.gz", "asset_url": asset_url, "sha256": match.group(1), "source": "github-release"}
-        except (urllib.error.URLError, OSError, ValueError, json.JSONDecodeError):
-            return {"tag": GE_FIXED_VERSION, "asset_name": f"{GE_FIXED_VERSION}.tar.gz", "asset_url": GE_FIXED_URL, "sha256": GE_FIXED_SHA256, "source": "fixed-fallback"}
+            return {"tag": tag, "asset_name": f"{tag}.tar.gz", "asset_url": asset_url, "sha256": match.group(1), "size": str(size), "source": "github-release"}
+        except (OSError, ValueError, json.JSONDecodeError):
+            return {"tag": GE_FIXED_VERSION, "asset_name": f"{GE_FIXED_VERSION}.tar.gz", "asset_url": GE_FIXED_URL, "sha256": GE_FIXED_SHA256, "size": str(GE_FIXED_SIZE), "source": "fixed-fallback"}
 
-    def _download_ge_asset(self, url: str, name: str) -> Path:
-        return self._download_ge_file(url, name, MAX_GE_ARCHIVE_SIZE)
+    async def _download_latest_ge_archive(self, release: dict[str, str]) -> Path:
+        manifest_url = str(release["asset_url"])
+        expected_sha256 = str(release["sha256"]).lower()
+        expected_size = int(release["size"])
+        try:
+            mirror_text = await asyncio.to_thread(
+                self._curl_read_text,
+                f"{GITEE_RAW_ORIGIN}{GITEE_PRIMARY_REPO}/raw/main/ge-proton/latest.txt",
+            )
+            manifest = self._parse_gitee_manifest(mirror_text)
+            if manifest["source_url"] == manifest_url and manifest["sha256"] == expected_sha256 and int(manifest["size"]) == expected_size:
+                return await self._download_gitee_mirror(
+                    GITEE_PRIMARY_REPO, "ge-proton", manifest_url, expected_sha256,
+                    expected_size, ".tar.gz", self._emit_latest_ge_bytes(expected_size),
+                )
+        except ValueError:
+            pass
+        last_error: Exception | None = None
+        for prefix in GE_MIRROR_PREFIXES:
+            candidate = manifest_url if not prefix else prefix + manifest_url
+            descriptor, name = tempfile.mkstemp(dir=self.data_root, prefix="ge-", suffix=".download")
+            os.close(descriptor)
+            temporary = Path(name)
+            try:
+                await self._curl_download_progress(
+                    candidate, temporary, expected_size,
+                    MAX_GE_ARCHIVE_SIZE,
+                    self._emit_latest_ge_bytes(expected_size),
+                )
+                return temporary
+            except ValueError as error:
+                last_error = error
+                temporary.unlink(missing_ok=True)
+        raise ValueError("ge_proton_download_failed") from last_error
+
+    def _emit_latest_ge_bytes(self, expected_size: int) -> Callable[[int], Awaitable[None]]:
+        async def progress(downloaded: int) -> None:
+            await self._update_download_job(
+                "ge_latest", "compat_download_phase", min(95, downloaded * 95 // expected_size)
+            )
+        return progress
 
     def _download_ge_file(self, url: str, name: str, maximum: int) -> Path:
         if not re.fullmatch(r"[A-Za-z0-9._-]+(?:\.tar\.gz)?", name): raise ValueError("ge_proton_release_invalid")
@@ -1004,29 +1239,31 @@ class Plugin:
             candidate = url if not prefix else prefix + url
             temporary: Path | None = None
             try:
-                with urllib.request.urlopen(urllib.request.Request(candidate, headers={"User-Agent": "DeckRecall"}), timeout=45) as response:
-                    with tempfile.NamedTemporaryFile(dir=self.data_root, prefix="ge-", suffix=".download", delete=False) as handle:
-                        temporary = Path(handle.name)
-                        total = 0
-                        for chunk in iter(lambda: response.read(1024 * 1024), b""):
-                            total += len(chunk)
-                            if total > maximum: raise ValueError("ge_proton_download_too_large")
-                            handle.write(chunk)
+                descriptor, name_path = tempfile.mkstemp(dir=self.data_root, prefix="ge-", suffix=".download")
+                os.close(descriptor)
+                temporary = Path(name_path)
+                self._curl_download_sync(candidate, temporary, maximum, 1200)
                 return temporary
-            except (urllib.error.URLError, OSError, ValueError) as error:
+            except (OSError, ValueError) as error:
                 if temporary: temporary.unlink(missing_ok=True)
                 last_error = error
         raise ValueError("ge_proton_download_failed") from last_error
 
     async def _download_plugin_archive(self, release: dict[str, Any], plugin_id: str) -> Path:
-        """Download one plugin archive with a China-friendly source and resume support.
-
-        This follows the proven Decky pattern used by Moddy: blocking urllib
-        operations run in worker threads, while progress events are awaited on
-        Decky's asyncio loop. ghfast is tried first and GitHub is the sole
-        fallback, avoiding long waits on a chain of stale mirrors.
-        """
+        """Use the fixed Gitee chunks first, then vetted GitHub transports."""
         last_error: Exception | None = None
+        expected_size = int(release["size"])
+        async def progress(downloaded: int) -> None:
+            await self._emit_plugin_progress(
+                plugin_id, "plugin_download_phase", min(95, downloaded * 95 // expected_size)
+            )
+        try:
+            return await self._download_gitee_mirror(
+                str(release["mirror_repo"]), str(release["mirror_id"]),
+                str(release["url"]), str(release["sha256"]), expected_size, ".zip", progress,
+            )
+        except ValueError as error:
+            last_error = error
         for prefix in PLUGIN_DOWNLOAD_PREFIXES:
             candidate = release["url"] if not prefix else prefix + release["url"]
             temporary: Path | None = None
@@ -1036,7 +1273,7 @@ class Plugin:
                 ) as handle:
                     temporary = Path(handle.name)
                 await self._download_plugin_source(
-                    candidate, temporary, plugin_id, int(release["size"])
+                    candidate, temporary, plugin_id, expected_size
                 )
                 if (await asyncio.to_thread(self._hash, temporary)).lower() != release["sha256"]:
                     raise ValueError("plugin_install_checksum_failed")
@@ -1047,7 +1284,7 @@ class Plugin:
                     temporary.unlink(missing_ok=True)
                 if str(error) == "plugin_install_too_large":
                     raise
-            except (OSError, urllib.error.URLError) as error:
+            except (OSError, ValueError) as error:
                 last_error = error
                 if temporary:
                     temporary.unlink(missing_ok=True)
@@ -1056,63 +1293,16 @@ class Plugin:
     async def _download_plugin_source(
         self, url: str, destination: Path, plugin_id: str, expected_size: int
     ) -> None:
-        downloaded = 0
-        last_percent = -1
-        stalls = 0
-        last_interruption: Exception | None = None
-
-        while downloaded < expected_size:
-            progress_before = downloaded
-            headers = {"User-Agent": "DeckRecall"}
-            if downloaded:
-                headers["Range"] = f"bytes={downloaded}-"
-            request = urllib.request.Request(url, headers=headers)
-            response: Any = None
-            try:
-                response = await asyncio.to_thread(
-                    urllib.request.urlopen, request, None, PLUGIN_DOWNLOAD_STALL_TIMEOUT
+        try:
+            async def progress(downloaded: int) -> None:
+                await self._emit_plugin_progress(
+                    plugin_id, "plugin_download_phase", min(95, downloaded * 95 // expected_size)
                 )
-                resuming = downloaded > 0 and getattr(response, "status", 200) == 206
-                if downloaded and not resuming:
-                    downloaded = 0
-                mode = "ab" if resuming else "wb"
-                with destination.open(mode) as target:
-                    while True:
-                        chunk = await asyncio.to_thread(response.read, PLUGIN_DOWNLOAD_CHUNK_SIZE)
-                        if not chunk:
-                            break
-                        target.write(chunk)
-                        downloaded += len(chunk)
-                        if downloaded > MAX_PLUGIN_ARCHIVE_SIZE:
-                            raise ValueError("plugin_install_too_large")
-                        percent = min(95, downloaded * 95 // expected_size)
-                        if percent != last_percent:
-                            last_percent = percent
-                            await self._emit_plugin_progress(
-                                plugin_id, "plugin_download_phase", percent
-                            )
-                if downloaded >= expected_size:
-                    await self._emit_plugin_progress(plugin_id, "plugin_download_phase", 95)
-                    return
-            except ValueError:
-                raise
-            except (OSError, urllib.error.URLError, TimeoutError) as error:
-                last_interruption = error
-                if decky:
-                    decky.logger.warning(
-                        f"Plugin download interrupted at {downloaded} bytes: {error}"
-                    )
-            finally:
-                if response is not None:
-                    await asyncio.to_thread(response.close)
-
-            if downloaded > progress_before:
-                stalls = 0
-            else:
-                stalls += 1
-                if stalls >= PLUGIN_DOWNLOAD_MAX_STALLS:
-                    raise ValueError("plugin_install_download_failed") from last_interruption
-                await asyncio.sleep(min(2 ** stalls, 10))
+            await self._curl_download_progress(
+                url, destination, expected_size, MAX_PLUGIN_ARCHIVE_SIZE, progress
+            )
+        except ValueError as error:
+            raise ValueError("plugin_install_download_failed") from error
 
     def _safe_install_plugin_archive(self, archive: Path, directory: str) -> None:
         if directory not in {"Decky LSFG-VK", "Decky-Framegen"}:

@@ -335,7 +335,9 @@ function cleanExeName(path) {
 function exeSelectionPath(value) {
     if (!value || typeof value !== "object")
         return undefined;
-    const path = value.realpath;
+    const record = value;
+    const path = typeof record.realpath === "string" ? record.realpath
+        : typeof record.path === "string" ? record.path : "";
     if (typeof path !== "string" || !path.startsWith("/") || !/\.exe$/i.test(path))
         return undefined;
     return path;
@@ -529,6 +531,8 @@ var exeInstallDescription$1 = "Run a Windows installer with Steam Proton, or ide
 var exeInstallCompatTool$1 = "Proton tool";
 var exeInstallerMode$1 = "Option 1: choose a Windows installer EXE. Return after installation to scan for the new program.";
 var chooseExeInstaller$1 = "Choose installer EXE and run with Proton";
+var exePickerOpening$1 = "Opening the EXE file picker…";
+var folderPickerOpening$1 = "Opening the game-folder picker…";
 var exeInstallerRunning$1 = "The installer started through Steam / Proton. Finish and close it, then scan the installed programs.";
 var scanInstalledExe$1 = "Installation finished — scan new EXEs";
 var installedExe$1 = "Confirm the main executable";
@@ -776,6 +780,8 @@ var enUS = {
 	exeInstallCompatTool: exeInstallCompatTool$1,
 	exeInstallerMode: exeInstallerMode$1,
 	chooseExeInstaller: chooseExeInstaller$1,
+	exePickerOpening: exePickerOpening$1,
+	folderPickerOpening: folderPickerOpening$1,
 	exeInstallerRunning: exeInstallerRunning$1,
 	scanInstalledExe: scanInstalledExe$1,
 	installedExe: installedExe$1,
@@ -1024,6 +1030,8 @@ var exeInstallDescription = "借助 Steam Proton 运行 Windows 安装器，或�
 var exeInstallCompatTool = "使用的 Proton";
 var exeInstallerMode = "方式一：选择 Windows 安装 EXE。安装完成后返回这里扫描新程序。";
 var chooseExeInstaller = "选择安装 EXE 并用 Proton 运行";
+var exePickerOpening = "正在打开 EXE 文件选择器…";
+var folderPickerOpening = "正在打开游戏文件夹选择器…";
 var exeInstallerRunning = "安装器已通过 Steam／Proton 启动。请完成安装并关闭安装器，然后扫描已安装程序。";
 var scanInstalledExe = "安装完成，扫描新的 EXE";
 var installedExe = "确认要运行的主 EXE";
@@ -1271,6 +1279,8 @@ var zhCN = {
 	exeInstallCompatTool: exeInstallCompatTool,
 	exeInstallerMode: exeInstallerMode,
 	chooseExeInstaller: chooseExeInstaller,
+	exePickerOpening: exePickerOpening,
+	folderPickerOpening: folderPickerOpening,
 	exeInstallerRunning: exeInstallerRunning,
 	scanInstalledExe: scanInstalledExe,
 	installedExe: installedExe,
@@ -1615,7 +1625,7 @@ const undoRestore = callable("undo_restore");
 const getEvents = callable("get_events");
 const getLaunchProfile = callable("get_launch_profile");
 const saveLaunchProfile = callable("save_launch_profile");
-const installLatestGeProton = callable("install_latest_ge_proton");
+const startLatestGeProtonInstall = callable("start_latest_ge_proton_install");
 const openProtontricks = callable("open_protontricks");
 const prepareTrainerDownload = callable("prepare_trainer_download");
 const downloadTrainerToDocuments = callable("download_trainer_to_documents");
@@ -1844,13 +1854,7 @@ async function readLaunchOptions(appId) {
     return (await readAppDetails(appId)).strLaunchOptions;
 }
 async function chooseExecutable(startPath) {
-    let result;
-    try {
-        result = await openFilePicker(0 /* FileSelectionType.FILE */, startPath || "/home/deck/Documents", true, true, undefined, undefined, false, true);
-    }
-    catch {
-        return undefined;
-    }
+    const result = await openFilePicker(0 /* FileSelectionType.FILE */, startPath || "/home/deck/Documents", true, false, (file) => /\.(?:exe|bat)$/i.test(file.name), ["exe", "bat"], false, false);
     const path = typeof result?.path === "string" ? result.path : typeof result?.realpath === "string" ? result.realpath : "";
     if (!/\.(?:exe|bat)$/i.test(path))
         throw new Error("invalid_executable_path");
@@ -2180,13 +2184,11 @@ function GameContent({ appId }) {
         setInstallingGe(true);
         setGeStatus("");
         try {
-            const result = await installLatestGeProton();
-            setGeStatus(t("geProtonInstalled", { version: result.version }));
+            await startLatestGeProtonInstall();
+            setDownloadJobs(await getDownloadJobs());
         }
         catch (nextError) {
             setGeStatus(t(normalizeError(nextError)));
-        }
-        finally {
             setInstallingGe(false);
         }
     };
@@ -2291,6 +2293,20 @@ function GameContent({ appId }) {
                 setTrainerCompatStatus(t(normalizeError(new Error(completed.error))));
             if (completed)
                 setInstallingTrainerCompat(undefined);
+        }
+        const geJob = [...downloadJobs].reverse().find((job) => job.target === "ge_latest");
+        if (geJob?.status === "queued" || geJob?.status === "running") {
+            setInstallingGe(true);
+            setGeStatus(`${t(geJob.status === "queued" ? "download_queued_phase" : geJob.phase)} ${geJob.percent}%`);
+        }
+        else if (geJob?.status === "done") {
+            setInstallingGe(false);
+            if (geJob.result?.version)
+                setGeStatus(t("geProtonInstalled", { version: geJob.result.version }));
+        }
+        else if (geJob?.status === "failed") {
+            setInstallingGe(false);
+            setGeStatus(t(normalizeError(new Error(geJob.error))));
         }
     }, [downloadJobs]);
     SP_REACT.useEffect(() => {
@@ -2408,11 +2424,10 @@ function QuickAccessContent() {
     const [gameExeCandidates, setGameExeCandidates] = SP_REACT.useState([]);
     const [selectedGameExe, setSelectedGameExe] = SP_REACT.useState("");
     const chooseAndRunExeInstaller = async () => {
-        DFL.Navigation.CloseSideMenus();
         setExeInstallBusy(true);
-        setExeInstallStatus("");
+        setExeInstallStatus(t("exePickerOpening"));
         try {
-            const selected = await openFilePicker(0 /* FileSelectionType.FILE */, "/home/deck/Downloads", true, undefined, /\.exe$/i, undefined, false, true);
+            const selected = await openFilePicker(0 /* FileSelectionType.FILE */, "/home/deck/Downloads", true, false, (file) => /\.exe$/i.test(file.name), ["exe"], false, false);
             const installer = exeSelectionPath(selected);
             if (!installer)
                 throw new Error("exe_install_file_invalid");
@@ -2463,11 +2478,10 @@ function QuickAccessContent() {
         }
     };
     const chooseExtractedGameFolder = async () => {
-        DFL.Navigation.CloseSideMenus();
         setExeInstallBusy(true);
-        setExeInstallStatus("");
+        setExeInstallStatus(t("folderPickerOpening"));
         try {
-            const selected = await openFilePicker(1 /* FileSelectionType.FOLDER */, "/home/deck/Downloads", true, true, undefined, undefined, false, true);
+            const selected = await openFilePicker(1 /* FileSelectionType.FOLDER */, "/home/deck/Downloads", false, true, undefined, undefined, false, false);
             const selectedPath = folderSelectionPath(selected);
             if (!selectedPath)
                 throw new Error("exe_game_folder_invalid");
@@ -2482,7 +2496,9 @@ function QuickAccessContent() {
             setExeInstallStatus(t("exeGameFolderSelected", { name: matched.name }));
         }
         catch (error) {
-            setExeInstallStatus(t(normalizeError(error)));
+            const code = normalizeError(error);
+            setExeInstallStatus(t(code));
+            toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
         }
         finally {
             setExeInstallBusy(false);
@@ -2603,24 +2619,39 @@ function QuickAccessContent() {
     }, []);
     SP_REACT.useEffect(() => {
         const updateJob = [...downloadJobs].reverse().find((job) => job.target === "self_update");
-        if (!updateJob)
-            return;
-        setUpdateProgress({
-            phase: updateJob.status === "queued" ? "download_queued_phase" : updateJob.phase,
-            percent: updateJob.percent,
-        });
-        if (updateJob.status === "queued" || updateJob.status === "running") {
-            setInstallingUpdate(true);
-            return;
+        if (updateJob) {
+            setUpdateProgress({
+                phase: updateJob.status === "queued" ? "download_queued_phase" : updateJob.phase,
+                percent: updateJob.percent,
+            });
+            if (updateJob.status === "queued" || updateJob.status === "running") {
+                setInstallingUpdate(true);
+            }
+            else {
+                setInstallingUpdate(false);
+                if (updateJob.status === "done" && updateStatus) {
+                    const message = t("deckrecallUpdated", { installed: updateStatus.latest_version, latest: updateStatus.latest_version });
+                    setUpdateStatus({ ...updateStatus, installed_version: updateStatus.latest_version, update_available: false });
+                    setUpdateFeedback(message);
+                }
+                else if (updateJob.status === "failed") {
+                    setUpdateFeedback(t(normalizeError(new Error(updateJob.error))));
+                }
+            }
         }
-        setInstallingUpdate(false);
-        if (updateJob.status === "done" && updateStatus) {
-            const message = t("deckrecallUpdated", { installed: updateStatus.latest_version, latest: updateStatus.latest_version });
-            setUpdateStatus({ ...updateStatus, installed_version: updateStatus.latest_version, update_available: false });
-            setUpdateFeedback(message);
+        const geJob = [...downloadJobs].reverse().find((job) => job.target === "ge_latest");
+        if (geJob?.status === "queued" || geJob?.status === "running") {
+            setInstallingGe(true);
+            setGeStatus(`${t(geJob.status === "queued" ? "download_queued_phase" : geJob.phase)} ${geJob.percent}%`);
         }
-        else if (updateJob.status === "failed") {
-            setUpdateFeedback(t(normalizeError(new Error(updateJob.error))));
+        else if (geJob?.status === "done") {
+            setInstallingGe(false);
+            if (geJob.result?.version)
+                setGeStatus(t("geProtonInstalled", { version: geJob.result.version }));
+        }
+        else if (geJob?.status === "failed") {
+            setInstallingGe(false);
+            setGeStatus(t(normalizeError(new Error(geJob.error))));
         }
     }, [downloadJobs]);
     const requestOfficialProtonInstall = async (toolAppId, toolName) => {
@@ -2643,16 +2674,13 @@ function QuickAccessContent() {
         setInstallingGe(true);
         setGeStatus("");
         try {
-            const result = await installLatestGeProton();
-            setGeStatus(t("geProtonInstalled", { version: result.version }));
-            toaster.toast({ title: "DeckRecall", body: t("geProtonInstalled", { version: result.version }), duration: 5000, showToast: true });
+            await startLatestGeProtonInstall();
+            setDownloadJobs(await getDownloadJobs());
         }
         catch (error) {
             const code = normalizeError(error);
             setGeStatus(t(code));
             toaster.toast({ title: "DeckRecall", body: t(code), duration: 5000, showToast: true });
-        }
-        finally {
             setInstallingGe(false);
         }
     };

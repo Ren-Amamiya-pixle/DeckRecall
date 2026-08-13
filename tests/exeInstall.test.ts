@@ -4,6 +4,7 @@ import { cleanExeName, createGameShortcut, createInstallerShortcut, exeSelection
 
 test("accepts only absolute EXE file-picker results", () => {
   assert.equal(exeSelectionPath({ realpath: "/home/deck/Downloads/setup.EXE" }), "/home/deck/Downloads/setup.EXE");
+  assert.equal(exeSelectionPath({ path: "/home/deck/Downloads/setup.exe" }), "/home/deck/Downloads/setup.exe");
   assert.equal(exeSelectionPath({ realpath: "relative/setup.exe" }), undefined);
   assert.equal(exeSelectionPath({ realpath: "/home/deck/Downloads/setup.msi" }), undefined);
 });

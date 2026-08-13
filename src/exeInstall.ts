@@ -28,7 +28,9 @@ export function cleanExeName(path: string): string {
 
 export function exeSelectionPath(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const path = (value as { realpath?: unknown }).realpath;
+  const record = value as { realpath?: unknown; path?: unknown };
+  const path = typeof record.realpath === "string" ? record.realpath
+    : typeof record.path === "string" ? record.path : "";
   if (typeof path !== "string" || !path.startsWith("/") || !/\.exe$/i.test(path)) return undefined;
   return path;
 }

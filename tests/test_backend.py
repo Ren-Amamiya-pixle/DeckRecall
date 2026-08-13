@@ -123,11 +123,15 @@ class BackendTests(unittest.TestCase):
         self.assertTrue((final / "plugin.json").is_file())
         self.assertTrue((final / "dist/index.js").is_file())
 
-    def test_plugin_download_uses_ghfast_then_github(self):
+    def test_plugin_download_uses_gitee_then_ghfast_then_github(self):
         payload = b"verified plugin archive"
         expected = hashlib.sha256(payload).hexdigest()
         source_url = "https://github.com/example/plugin.zip"
         calls = []
+
+        async def fake_gitee(*args, **kwargs):
+            calls.append("gitee")
+            raise ValueError("download_transport_failed")
 
         async def fake_download(url, destination, plugin_id, expected_size):
             calls.append(url)
@@ -136,14 +140,17 @@ class BackendTests(unittest.TestCase):
             destination.write_bytes(payload)
 
         self.plugin._download_plugin_source = fake_download  # type: ignore[method-assign]
+        self.plugin._download_gitee_mirror = fake_gitee  # type: ignore[method-assign]
         release = {
             "url": source_url,
             "sha256": expected,
             "directory": "Decky LSFG-VK",
             "size": len(payload),
+            "mirror_repo": "zhoukeer-toolbox-mirror-3",
+            "mirror_id": "deckrecall-lsfg-zh",
         }
         archive = self.run_async(self.plugin._download_plugin_archive, release, "lsfg")
-        self.assertEqual(calls, [f"https://ghfast.top/{source_url}", source_url])
+        self.assertEqual(calls, ["gitee", f"https://ghfast.top/{source_url}", source_url])
         self.assertEqual(self.plugin._hash(archive), expected)
         archive.unlink(missing_ok=True)
 
@@ -163,6 +170,20 @@ class BackendTests(unittest.TestCase):
         self.plugin.self_update_progress = {"phase": "self_update_verify_phase", "percent": 96}
         update_progress = self.run_async(self.plugin.get_deckrecall_update_progress)
         self.assertEqual(update_progress["phase"], "self_update_verify_phase")
+
+    def test_gitee_manifest_is_strict_and_url_allowlist_rejects_unknown_hosts(self):
+        manifest = self.plugin._parse_gitee_manifest(
+            "id=deckrecall\nname=DeckRecall\nversion=v0.4.1\nfile=DeckRecall.zip\n"
+            "source_url=https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.4.1/DeckRecall.zip\n"
+            f"sha256={'a' * 64}\nsize=123\nchunks=0\nchunk_size=0\n"
+        )
+        self.assertEqual(manifest["id"], "deckrecall")
+        self.assertTrue(self.plugin._approved_https_url(
+            "https://gitee.com/zliu9732-hub/zhoukeer-toolbox-mirror-3/raw/main/deckrecall/latest.txt"
+        ))
+        self.assertFalse(self.plugin._approved_https_url("https://example.com/archive.zip"))
+        with self.assertRaisesRegex(ValueError, "download_manifest_invalid"):
+            self.plugin._parse_gitee_manifest("id=deckrecall\nid=duplicate\n")
 
     def test_progress_queries_reject_non_allowlisted_downloads(self):
         with self.assertRaisesRegex(ValueError, "plugin_install_invalid"):
