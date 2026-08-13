@@ -510,16 +510,16 @@ class Plugin:
             available = subprocess.run(
                 ["flatpak", "info", "com.github.Matoking.protontricks"],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=10, check=False,
+                timeout=10, check=False, env=self._external_command_environment(),
             ).returncode == 0
         except (OSError, subprocess.SubprocessError):
             available = False
         if not available: raise ValueError("protontricks_not_installed")
         try:
             subprocess.Popen(
-                ["flatpak", "run", "com.github.Matoking.protontricks", "--gui", "--appid", app_id],
+                ["flatpak", "run", "com.github.Matoking.protontricks", "--gui", app_id],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True,
+                start_new_session=True, env=self._external_command_environment(),
             )
         except OSError as error:
             raise ValueError("protontricks_launch_failed") from error
@@ -609,7 +609,9 @@ class Plugin:
             if self._hash(archive).lower() != release["sha256"].lower():
                 raise ValueError("ge_proton_checksum_failed")
             destination = self._compatibilitytools_dir()
-            installed = self._safe_extract_ge(archive, destination, release["tag"])
+            installed = await asyncio.to_thread(
+                self._safe_extract_ge, archive, destination, release["tag"]
+            )
             self._event("0", "ge_proton_installed", {"version": installed})
             return {"ok": True, "version": installed, "source": release["source"]}
         finally:
@@ -1409,7 +1411,12 @@ class Plugin:
             total = 0
             for member in members:
                 target = Path(member.name)
-                if target.is_absolute() or ".." in target.parts or member.issym() or member.islnk() or not (member.isdir() or member.isfile()):
+                if member.issym() or member.islnk():
+                    link_target = Path(member.linkname)
+                    resolved = Path(member.name).parent / link_target
+                    if link_target.is_absolute() or ".." in resolved.parts or not resolved.parts or resolved.parts[0] != root_name:
+                        raise ValueError("ge_proton_archive_invalid")
+                if target.is_absolute() or ".." in target.parts or not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
                     raise ValueError("ge_proton_archive_invalid")
                 total += member.size
                 if total > MAX_GE_UNPACKED_SIZE: raise ValueError("ge_proton_archive_too_large")

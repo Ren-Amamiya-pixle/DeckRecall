@@ -101,6 +101,23 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(installed, "GE-Proton10-1")
         self.assertTrue((self.plugin.steam_root / "compatibilitytools.d/GE-Proton10-1/proton").is_file())
 
+        linked = Path(self.temp.name) / "GE-Proton10-3.tar.gz"
+        with tarfile.open(linked, "w:gz") as bundle:
+            for name, payload in (
+                ("GE-Proton10-3/proton", b"runner"),
+                ("GE-Proton10-3/compatibilitytool.vdf", b"tool"),
+                ("GE-Proton10-3/toolmanifest.vdf", b"manifest"),
+            ):
+                entry = tarfile.TarInfo(name); entry.size = len(payload)
+                bundle.addfile(entry, io.BytesIO(payload))
+            link = tarfile.TarInfo("GE-Proton10-3/proton-link")
+            link.type = tarfile.SYMTYPE; link.linkname = "proton"
+            bundle.addfile(link)
+        self.assertEqual(
+            self.plugin._safe_extract_ge(linked, self.plugin.steam_root / "compatibilitytools.d", linked.name),
+            "GE-Proton10-3",
+        )
+
         evil = Path(self.temp.name) / "GE-Proton10-2.tar.gz"
         with tarfile.open(evil, "w:gz") as bundle:
             link = tarfile.TarInfo("GE-Proton10-2/proton")
