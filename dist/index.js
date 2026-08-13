@@ -2722,6 +2722,16 @@ var index = DFL.definePlugin(() => {
     routerHook.addRoute("/deckrecall/:appid", PageRouter, { exact: true });
     const contextMenuPatch = installGameContextMenuPatch();
     const automaticSnapshotMonitor = installAutomaticSnapshotMonitor();
+    const restartListener = addEventListener("deckrecall_restart_required", (kind) => {
+        window.setTimeout(() => {
+            if (kind === "steam") {
+                globalThis.SteamClient?.User?.StartRestart?.(false);
+            }
+            else if (kind === "decky") {
+                void callable("restart_decky_loader")().catch(console.warn);
+            }
+        }, 2000);
+    });
     return {
         title: SP_JSX.jsx("div", { className: DFL.staticClasses.Title, children: "DeckRecall" }),
         content: SP_JSX.jsx(DeckRecallErrorBoundary, { children: SP_JSX.jsx(QuickAccessContent, {}) }),
@@ -2729,6 +2739,7 @@ var index = DFL.definePlugin(() => {
         onDismount() {
             contextMenuPatch.unpatch();
             automaticSnapshotMonitor.unregister?.();
+            removeEventListener("deckrecall_restart_required", restartListener);
             routerHook.removeRoute("/deckrecall/:appid");
         },
     };

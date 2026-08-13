@@ -1465,7 +1465,33 @@ class Plugin:
                 raise ValueError("ge_proton_owner_failed")
             staging = Path(tempfile.mkdtemp(prefix="ge-", dir=destination))
             try:
-                bundle.extractall(staging, members=members, filter="data")
+                # Members were fully validated above. Extract them manually so
+                # installs do not depend on Python 3.12+'s tarfile filter API.
+                for member in members:
+                    target = staging.joinpath(*Path(member.name).parts)
+                    if member.isdir():
+                        target.mkdir(parents=True, exist_ok=True)
+                        os.chmod(target, (member.mode or 0o755) & 0o777)
+                hard_links: list[tuple[Path, Path]] = []
+                for member in members:
+                    target = staging.joinpath(*Path(member.name).parts)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    if member.isfile():
+                        source = bundle.extractfile(member)
+                        if source is None:
+                            raise ValueError("ge_proton_archive_invalid")
+                        with target.open("wb") as output:
+                            shutil.copyfileobj(source, output, 1024 * 1024)
+                        os.chmod(target, (member.mode or 0o644) & 0o777)
+                    elif member.issym():
+                        os.symlink(member.linkname, target)
+                    elif member.islnk():
+                        resolved = posixpath.normpath(member.linkname)
+                        hard_links.append(
+                            (staging.joinpath(*Path(resolved).parts), target)
+                        )
+                for source, target in hard_links:
+                    os.link(source, target)
                 extracted = staging / root_name
                 if not all((extracted / name).is_file() for name in ("compatibilitytool.vdf", "proton", "toolmanifest.vdf")):
                     raise ValueError("ge_proton_archive_invalid")

@@ -1,6 +1,6 @@
 {
   "name": "deckrecall",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "author": "Ren-Amamiya-pixle",
   "description": "SteamOS Decky plugin for safe game-state snapshots and Proton EXE onboarding",

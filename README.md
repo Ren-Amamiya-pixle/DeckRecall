@@ -1,5 +1,10 @@
 # DeckRecall
 
+DeckRecall 0.4.6 fixes GE-Proton installs on every supported SteamOS Python:
+
+- extracts validated GE-Proton archives manually, so install no longer depends on Python 3.12's `tarfile` filter API;
+- keeps SHA-256 verification, in-tree symlink checks, size limits, and atomic replacement.
+
 DeckRecall 0.4.5 automatically reloads installed plugins and compatibility tools:
 
 - restores the host library path only for system `curl` subprocesses, avoiding `_MEI` OpenSSL conflicts on current SteamOS;
