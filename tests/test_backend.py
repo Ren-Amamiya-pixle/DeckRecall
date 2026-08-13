@@ -1,6 +1,8 @@
 import asyncio
 import hashlib
+import io
 import os
+import subprocess
 import tempfile
 import tarfile
 import unittest
@@ -153,6 +155,58 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(calls, ["gitee", f"https://ghfast.top/{source_url}", source_url])
         self.assertEqual(self.plugin._hash(archive), expected)
         archive.unlink(missing_ok=True)
+
+    def test_external_curl_environment_restores_pyinstaller_library_path(self):
+        cases = (
+            ({"LD_LIBRARY_PATH": "/tmp/_MEI123"}, None),
+            ({"LD_LIBRARY_PATH": "/tmp/_MEI123:/custom", "LD_LIBRARY_PATH_ORIG": "/custom"}, "/custom"),
+            ({"LD_LIBRARY_PATH": "/tmp/_MEI123", "LD_LIBRARY_PATH_ORIG": ""}, ""),
+        )
+        for source, expected in cases:
+            with self.subTest(source=source), mock.patch.dict(
+                os.environ, {**source, "HTTPS_PROXY": "http://proxy.invalid"}, clear=True
+            ):
+                parent = dict(os.environ)
+                child = self.plugin._external_command_environment()
+                if expected is None:
+                    self.assertNotIn("LD_LIBRARY_PATH", child)
+                else:
+                    self.assertEqual(child["LD_LIBRARY_PATH"], expected)
+                self.assertEqual(child["HTTPS_PROXY"], "http://proxy.invalid")
+                self.assertEqual(dict(os.environ), parent)
+
+    def test_both_curl_paths_receive_sanitized_environment(self):
+        sync_destination = Path(self.temp.name) / "sync.download"
+
+        def fake_run(*args, **kwargs):
+            sync_destination.write_bytes(b"x")
+            return subprocess.CompletedProcess(args[0], 0)
+
+        poisoned = {"LD_LIBRARY_PATH": "/tmp/_MEI123", "PATH": "/usr/bin:/bin"}
+        with mock.patch.dict(os.environ, poisoned, clear=True), mock.patch(
+            "backend.main.subprocess.run", side_effect=fake_run
+        ) as run:
+            self.plugin._curl_download_sync(
+                "https://api.github.com/repos/Ren-Amamiya-pixle/DeckRecall/releases/latest",
+                sync_destination, 1,
+            )
+            self.assertNotIn("LD_LIBRARY_PATH", run.call_args.kwargs["env"])
+
+        async_destination = Path(self.temp.name) / "async.download"
+        async_destination.write_bytes(b"x")
+        process = mock.Mock()
+        process.poll.return_value = 0
+        process.returncode = 0
+        process.stderr = io.BytesIO()
+        with mock.patch.dict(os.environ, poisoned, clear=True), mock.patch(
+            "backend.main.subprocess.Popen", return_value=process
+        ) as popen:
+            self.run_async(
+                self.plugin._curl_download_progress,
+                "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.4.2/DeckRecall.zip",
+                async_destination, 1, 1,
+            )
+            self.assertNotIn("LD_LIBRARY_PATH", popen.call_args.kwargs["env"])
 
     def test_progress_can_be_polled_when_decky_events_are_unavailable(self):
         self.plugin._record_plugin_progress("lsfg", "plugin_download_phase", 27)

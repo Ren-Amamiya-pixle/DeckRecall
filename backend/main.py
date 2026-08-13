@@ -193,12 +193,23 @@ class Plugin:
             "--output", str(destination), url,
         ]
 
+    @staticmethod
+    def _external_command_environment() -> dict[str, str]:
+        """Run system tools outside Decky Loader's PyInstaller library path."""
+        environment = os.environ.copy()
+        if "LD_LIBRARY_PATH_ORIG" in environment:
+            environment["LD_LIBRARY_PATH"] = environment["LD_LIBRARY_PATH_ORIG"]
+        else:
+            environment.pop("LD_LIBRARY_PATH", None)
+        return environment
+
     @classmethod
     def _curl_download_sync(cls, url: str, destination: Path, maximum: int, timeout: int = 120) -> None:
         try:
             result = subprocess.run(
                 cls._curl_command(url, destination, maximum, timeout),
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=False, timeout=timeout + 5,
+                env=cls._external_command_environment(),
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             raise ValueError("download_transport_failed") from error
@@ -266,6 +277,7 @@ class Plugin:
             process = subprocess.Popen(
                 self._curl_command(url, destination, maximum, 1200),
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                env=self._external_command_environment(),
             )
             last_size = -1
             while process.poll() is None:
