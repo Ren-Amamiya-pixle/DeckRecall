@@ -70,7 +70,7 @@ DECKRECALL_RELEASE_ORIGIN = "https://github.com/Ren-Amamiya-pixle/DeckRecall/rel
 CHINESE_PLUGIN_RELEASES = {
     "lsfg": {
         "bundled": "assets/lsfg-zh.zip",
-        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.3.1/lsfg-zh.zip",
+        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.4.9/lsfg-zh.zip",
         "sha256": "278d0fe9bc81c2f3c68e53efa00b66bbb3cbba07f0b7fa2937cf881426f2fe56",
         "directory": "Decky LSFG-VK",
         "size": 16437127,
@@ -79,10 +79,10 @@ CHINESE_PLUGIN_RELEASES = {
     },
     "fsr4": {
         "bundled": "assets/fsr4-zh.zip",
-        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.3.1/fsr4-zh.zip",
-        "sha256": "f578ea48296eb7b4a5645aeaef084f0e6368ec285b79f845183e13fb9c4d5e53",
+        "url": "https://github.com/Ren-Amamiya-pixle/DeckRecall/releases/download/v0.4.9/fsr4-zh.zip",
+        "sha256": "0af9ed38a05d72fa3a8430244dc463f19be56344f7f2645bcb0f13a4204b7444",
         "directory": "Decky-Framegen",
-        "size": 198763093,
+        "size": 198761655,
         "mirror_repo": GITEE_DECKRECALL_REPO,
         "mirror_id": "deckrecall-fsr4-zh",
     },

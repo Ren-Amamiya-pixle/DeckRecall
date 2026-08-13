@@ -387,7 +387,7 @@ class BackendTests(unittest.TestCase):
                 bundle.writestr(name, payload)
         expected_hashes = {
             "lsfg-zh.zip": "278d0fe9bc81c2f3c68e53efa00b66bbb3cbba07f0b7fa2937cf881426f2fe56",
-            "fsr4-zh.zip": "f578ea48296eb7b4a5645aeaef084f0e6368ec285b79f845183e13fb9c4d5e53",
+            "fsr4-zh.zip": "0af9ed38a05d72fa3a8430244dc463f19be56344f7f2645bcb0f13a4204b7444",
         }
         with mock.patch("os.geteuid", return_value=1000), mock.patch.object(
             self.plugin, "_hash", side_effect=lambda path: expected_hashes[path.name]

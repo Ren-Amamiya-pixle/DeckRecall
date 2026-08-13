@@ -1,5 +1,11 @@
 # DeckRecall
 
+DeckRecall 0.4.9 keeps the LSFG/FSR4 plugins' attribution small and low-key:
+
+- the bundled Chinese plugin assets carry only `Ren-Amamiya-pixle` as the localization credit;
+- FSR4's in-plugin UI now shows a small `中文汉化：Ren-Amamiya-pixle` line without big-account or marketplace handles;
+- the LSFG and FSR4 online installs use fixed, SHA-256 verified assets from the v0.4.9 Release.
+
 DeckRecall 0.4.8 automatically restarts Decky Loader after an in-plugin update finishes:
 
 - after the update archive is verified and atomically installed, DeckRecall restarts `plugin_loader.service` once the download queue is empty;
