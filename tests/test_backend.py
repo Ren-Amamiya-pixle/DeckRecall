@@ -412,3 +412,23 @@ class BackendTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "self_update_version_mismatch"):
             self.plugin._safe_install_deckrecall_archive(archive, "0.3.1")
         self.assertEqual((installed / "package.json").read_text(), '{"version":"0.2.8"}')
+
+    def test_self_update_schedules_decky_loader_restart(self):
+        self.plugin._deckrecall_update_status = lambda: {
+            "update_available": True,
+            "installed_version": "0.4.6",
+            "latest_version": "0.4.7",
+            "release": {"version": "0.4.7", "sha256": "0" * 64, "size": 1},
+        }
+        archive = Path(self.temp.name) / "update.zip"
+        archive.write_bytes(b"update")
+
+        async def fake_download(release):
+            return archive
+
+        self.plugin._download_deckrecall_update_archive = fake_download
+        self.plugin._hash = lambda path: "0" * 64
+        self.plugin._safe_install_deckrecall_archive = lambda archive, version: None
+        result = self.run_async(self.plugin.install_deckrecall_update)
+        self.assertTrue(result["updated"])
+        self.assertEqual(self.plugin.restart_after_queue, "decky")

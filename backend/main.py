@@ -476,6 +476,7 @@ class Plugin:
             )
             await self._emit_self_update_progress("self_update_complete_phase", 100)
             self._event("0", "deckrecall_updated", {"version": release["version"]})
+            self.restart_after_queue = "decky"
             return {
                 "ok": True,
                 "updated": True,

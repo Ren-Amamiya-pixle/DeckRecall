@@ -1,5 +1,10 @@
 # DeckRecall
 
+DeckRecall 0.4.8 automatically restarts Decky Loader after an in-plugin update finishes:
+
+- after the update archive is verified and atomically installed, DeckRecall restarts `plugin_loader.service` once the download queue is empty;
+- no extra restart step is needed, and Steam remains running.
+
 DeckRecall 0.4.7 makes the LSFG/FSR4 install buttons explicitly online-capable and corrects the trainer compatibility-layer wording:
 
 - LSFG and FSR4 installs use the fixed Gitee chunk mirror when the bundled ZIP is absent, with a vetted GitHub fallback;
