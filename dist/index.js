@@ -288,6 +288,10 @@ const ERROR_CODES = [
     "self_update_checksum_failed", "self_update_archive_invalid", "self_update_version_mismatch",
     "self_update_target_invalid", "self_update_too_large", "self_update_install_failed",
     "download_job_invalid", "download_job_active",
+    "exe_install_file_invalid", "exe_install_shortcut_failed", "exe_install_steam_api_unavailable",
+    "exe_install_backend_unavailable", "exe_install_prefix_invalid", "exe_install_not_started",
+    "exe_install_candidate_invalid",
+    "exe_game_folder_invalid", "exe_game_folder_not_allowed",
     "memory_steamos_required", "memory_device_unsupported", "memory_root_required",
     "memory_command_missing", "memory_read_failed", "memory_backend_unavailable",
     "memory_path_invalid", "memory_space_insufficient", "memory_battery_low",
@@ -322,6 +326,60 @@ function normalizeError(error) {
             return code;
     }
     return "unknown_error";
+}
+
+function cleanExeName(path) {
+    const file = path.split(/[\\/]/).pop() || "Windows app";
+    return file.replace(/\.[^.]+$/, "").trim() || "Windows app";
+}
+function exeSelectionPath(value) {
+    if (!value || typeof value !== "object")
+        return undefined;
+    const path = value.realpath;
+    if (typeof path !== "string" || !path.startsWith("/") || !/\.exe$/i.test(path))
+        return undefined;
+    return path;
+}
+function folderSelectionPath(value) {
+    if (!value || typeof value !== "object")
+        return undefined;
+    const record = value;
+    const path = typeof record.realpath === "string" ? record.realpath
+        : typeof record.path === "string" ? record.path : "";
+    if (!path.startsWith("/"))
+        return undefined;
+    return path.replace(/\/+$/, "") || "/";
+}
+async function createInstallerShortcut(apps, name, installer, compatTool = "proton_experimental") {
+    const appId = await apps.AddShortcut(name, installer, installer.replace(/[/\\][^/\\]+$/, ""), "");
+    if (!Number.isInteger(appId) || appId <= 0)
+        throw new Error("exe_install_shortcut_failed");
+    apps.SetShortcutName(appId, name);
+    apps.SetShortcutExe(appId, installer);
+    apps.SetShortcutStartDir(appId, installer.replace(/[/\\][^/\\]+$/, ""));
+    apps.SetAppLaunchOptions(appId, "");
+    apps.SpecifyCompatTool(appId, compatTool);
+    return appId;
+}
+async function createGameShortcut(apps, candidate, compatTool = "proton_experimental") {
+    const appId = await apps.AddShortcut(candidate.name, candidate.path, candidate.directory, "");
+    if (!Number.isInteger(appId) || appId <= 0)
+        throw new Error("exe_install_shortcut_failed");
+    finalizeInstallerShortcut(apps, appId, candidate, candidate.name);
+    apps.SpecifyCompatTool(appId, compatTool);
+    return appId;
+}
+function launchInstaller(apps, appId) {
+    const gameId = (BigInt(appId >>> 0) << 32n) | 0x02000000n;
+    apps.RunGame(gameId.toString(), "", -1, 100);
+}
+function finalizeInstallerShortcut(apps, appId, candidate, displayName) {
+    const name = displayName.trim() || candidate.name;
+    apps.SetShortcutName(appId, name);
+    apps.SetShortcutExe(appId, candidate.path);
+    apps.SetShortcutStartDir(appId, candidate.directory);
+    apps.SetAppLaunchOptions(appId, "");
+    apps.CreateDesktopShortcutForApp(appId);
 }
 
 var title$1 = "DeckRecall";
@@ -466,6 +524,40 @@ var gameSettings$1 = "Game settings";
 var compatibilityTool$1 = "Compatibility tool";
 var compatibilityToolDescription$1 = "Choose a commonly used Proton compatibility tool installed in Steam and available to this game.";
 var installCompatibilityTools$1 = "Install Steam compatibility tools";
+var exeInstallTitle$1 = "Install and add Windows EXEs";
+var exeInstallDescription$1 = "Run a Windows installer with Steam Proton, or identify the main EXE in an extracted game. After confirmation, DeckRecall adds it to Steam and creates a desktop shortcut. The installer and final app share one Proton prefix.";
+var exeInstallCompatTool$1 = "Proton tool";
+var exeInstallerMode$1 = "Option 1: choose a Windows installer EXE. Return after installation to scan for the new program.";
+var chooseExeInstaller$1 = "Choose installer EXE and run with Proton";
+var exeInstallerRunning$1 = "The installer started through Steam / Proton. Finish and close it, then scan the installed programs.";
+var scanInstalledExe$1 = "Installation finished — scan new EXEs";
+var installedExe$1 = "Confirm the main executable";
+var newExe$1 = "newly installed";
+var exeCandidatesFound$1 = "Found {count} candidate programs, ranked by likelihood. Confirm one before adding it.";
+var exeCandidatesEmpty$1 = "No usable main program was found. Confirm installation finished and remained inside this Proton prefix.";
+var addInstalledExe$1 = "Confirm main EXE and finalize Steam entry";
+var exeExtractedMode$1 = "Option 2: an extracted non-Steam game. Select the whole game folder and detect its main EXE.";
+var chooseExtractedGameFolder$1 = "Choose the complete extracted game folder";
+var scanExtractedGames$1 = "Scan all common locations";
+var exeGameFolder$1 = "Game folder";
+var exeGameFolderSelected$1 = "Selected: {name}";
+var exeGameFoldersFound$1 = "Found {count} folders containing EXEs.";
+var exeGameFoldersEmpty$1 = "No EXE-bearing game folder was found in Downloads, Documents, Desktop, or removable storage.";
+var detectGameExe$1 = "Detect this folder's game EXE";
+var addExtractedGame$1 = "Confirm and add to Steam";
+var exeInstallComplete$1 = "{name} was added to Steam and a desktop shortcut was created. You can change Proton again in Steam properties.";
+var exeInstallNoArtwork$1 = "DeckRecall does not download or assign artwork, avoiding untrusted or incorrect images.";
+var exe_install_file_invalid$1 = "Choose a Windows .exe installer with an absolute path.";
+var exe_install_shortcut_failed$1 = "Steam could not create the non-Steam shortcut.";
+var exe_install_steam_api_unavailable$1 = "This Steam client does not expose the required non-Steam shortcut APIs.";
+var exe_install_backend_unavailable$1 = "The EXE discovery backend is missing; reinstall the complete plugin.";
+var exe_install_prefix_invalid$1 = "The Proton prefix path is unsafe; scanning stopped.";
+var exe_install_not_started$1 = "No installer baseline was found; choose the installer EXE again.";
+var exe_install_candidate_invalid$1 = "The selected EXE changed or is outside the allowed scan; scan again.";
+var exe_game_folder_invalid$1 = "The game folder changed or is outside the allowed roots; scan again.";
+var exe_game_folder_not_allowed$1 = "Choose an EXE-bearing game folder under Downloads, Documents, Desktop, or removable storage.";
+var exe_install_started$1 = "The pre-install Proton prefix baseline was recorded.";
+var exe_install_completed$1 = "The final executable was confirmed and written.";
 var steamDefaultCompat$1 = "Steam default (automatic)";
 var applyCompatibilityTool$1 = "Apply compatibility tool";
 var noRecommendedCompatTools$1 = "Proton Experimental, Proton 10.0-4, or GE-Proton was not detected.";
@@ -679,6 +771,40 @@ var enUS = {
 	compatibilityTool: compatibilityTool$1,
 	compatibilityToolDescription: compatibilityToolDescription$1,
 	installCompatibilityTools: installCompatibilityTools$1,
+	exeInstallTitle: exeInstallTitle$1,
+	exeInstallDescription: exeInstallDescription$1,
+	exeInstallCompatTool: exeInstallCompatTool$1,
+	exeInstallerMode: exeInstallerMode$1,
+	chooseExeInstaller: chooseExeInstaller$1,
+	exeInstallerRunning: exeInstallerRunning$1,
+	scanInstalledExe: scanInstalledExe$1,
+	installedExe: installedExe$1,
+	newExe: newExe$1,
+	exeCandidatesFound: exeCandidatesFound$1,
+	exeCandidatesEmpty: exeCandidatesEmpty$1,
+	addInstalledExe: addInstalledExe$1,
+	exeExtractedMode: exeExtractedMode$1,
+	chooseExtractedGameFolder: chooseExtractedGameFolder$1,
+	scanExtractedGames: scanExtractedGames$1,
+	exeGameFolder: exeGameFolder$1,
+	exeGameFolderSelected: exeGameFolderSelected$1,
+	exeGameFoldersFound: exeGameFoldersFound$1,
+	exeGameFoldersEmpty: exeGameFoldersEmpty$1,
+	detectGameExe: detectGameExe$1,
+	addExtractedGame: addExtractedGame$1,
+	exeInstallComplete: exeInstallComplete$1,
+	exeInstallNoArtwork: exeInstallNoArtwork$1,
+	exe_install_file_invalid: exe_install_file_invalid$1,
+	exe_install_shortcut_failed: exe_install_shortcut_failed$1,
+	exe_install_steam_api_unavailable: exe_install_steam_api_unavailable$1,
+	exe_install_backend_unavailable: exe_install_backend_unavailable$1,
+	exe_install_prefix_invalid: exe_install_prefix_invalid$1,
+	exe_install_not_started: exe_install_not_started$1,
+	exe_install_candidate_invalid: exe_install_candidate_invalid$1,
+	exe_game_folder_invalid: exe_game_folder_invalid$1,
+	exe_game_folder_not_allowed: exe_game_folder_not_allowed$1,
+	exe_install_started: exe_install_started$1,
+	exe_install_completed: exe_install_completed$1,
 	steamDefaultCompat: steamDefaultCompat$1,
 	applyCompatibilityTool: applyCompatibilityTool$1,
 	noRecommendedCompatTools: noRecommendedCompatTools$1,
@@ -893,6 +1019,40 @@ var gameSettings = "游戏设置";
 var compatibilityTool = "兼容层";
 var compatibilityToolDescription = "选择 Steam 已安装并为此游戏提供的常用 Proton 兼容层。";
 var installCompatibilityTools = "安装 Steam 兼容层";
+var exeInstallTitle = "Windows EXE 安装与入库";
+var exeInstallDescription = "借助 Steam Proton 运行 Windows 安装器，或识别已解压游戏的主 EXE；确认后加入 Steam 并创建桌面图标。安装器和正式程序会复用同一个 Proton 前缀。";
+var exeInstallCompatTool = "使用的 Proton";
+var exeInstallerMode = "方式一：选择 Windows 安装 EXE。安装完成后返回这里扫描新程序。";
+var chooseExeInstaller = "选择安装 EXE 并用 Proton 运行";
+var exeInstallerRunning = "安装器已通过 Steam／Proton 启动。请完成安装并关闭安装器，然后扫描已安装程序。";
+var scanInstalledExe = "安装完成，扫描新的 EXE";
+var installedExe = "确认要运行的主 EXE";
+var newExe = "本次新安装";
+var exeCandidatesFound = "识别到 {count} 个候选程序；已按主程序可能性排序，请确认后入库。";
+var exeCandidatesEmpty = "没有识别到可用主程序。请确认安装已完成，且没有把游戏装到 Proton 前缀之外。";
+var addInstalledExe = "确认主 EXE，转为正式 Steam 条目";
+var exeExtractedMode = "方式二：已解压的非 Steam 游戏。选择整个游戏文件夹，自动识别主 EXE。";
+var chooseExtractedGameFolder = "选择已解压的整个游戏文件夹";
+var scanExtractedGames = "扫描全部常用位置";
+var exeGameFolder = "游戏文件夹";
+var exeGameFolderSelected = "已选择：{name}";
+var exeGameFoldersFound = "发现 {count} 个包含 EXE 的文件夹。";
+var exeGameFoldersEmpty = "未在 Downloads、Documents、Desktop 或存储卡中发现包含 EXE 的游戏文件夹。";
+var detectGameExe = "自动识别此文件夹的游戏 EXE";
+var addExtractedGame = "确认并加入 Steam";
+var exeInstallComplete = "{name} 已加入 Steam，并创建桌面图标。可在 Steam 属性中继续更换 Proton。";
+var exeInstallNoArtwork = "不会自动下载或设置封面，避免给软件匹配不可信或错误图片。";
+var exe_install_file_invalid = "请选择绝对路径下的 Windows .exe 安装文件。";
+var exe_install_shortcut_failed = "Steam 未能创建非 Steam 条目。";
+var exe_install_steam_api_unavailable = "当前 Steam 客户端未提供所需的非 Steam 入库接口。";
+var exe_install_backend_unavailable = "EXE 识别后端缺失，请重新安装完整插件。";
+var exe_install_prefix_invalid = "该 Proton 前缀路径不安全，已停止扫描。";
+var exe_install_not_started = "未找到本次安装记录，请重新选择安装 EXE。";
+var exe_install_candidate_invalid = "所选 EXE 已变化或不在允许的扫描结果中，请重新扫描。";
+var exe_game_folder_invalid = "游戏文件夹已变化或不在允许的目录中，请重新扫描。";
+var exe_game_folder_not_allowed = "请选择 Downloads、Documents、Desktop 或存储卡内包含 EXE 的游戏文件夹。";
+var exe_install_started = "已记录安装前的 Proton 前缀。";
+var exe_install_completed = "已确认并写入正式程序。";
 var steamDefaultCompat = "Steam 默认（自动选择）";
 var applyCompatibilityTool = "应用兼容层";
 var noRecommendedCompatTools = "未检测到 Proton Experimental、Proton 10.0-4 或 GE-Proton。";
@@ -1106,6 +1266,40 @@ var zhCN = {
 	compatibilityTool: compatibilityTool,
 	compatibilityToolDescription: compatibilityToolDescription,
 	installCompatibilityTools: installCompatibilityTools,
+	exeInstallTitle: exeInstallTitle,
+	exeInstallDescription: exeInstallDescription,
+	exeInstallCompatTool: exeInstallCompatTool,
+	exeInstallerMode: exeInstallerMode,
+	chooseExeInstaller: chooseExeInstaller,
+	exeInstallerRunning: exeInstallerRunning,
+	scanInstalledExe: scanInstalledExe,
+	installedExe: installedExe,
+	newExe: newExe,
+	exeCandidatesFound: exeCandidatesFound,
+	exeCandidatesEmpty: exeCandidatesEmpty,
+	addInstalledExe: addInstalledExe,
+	exeExtractedMode: exeExtractedMode,
+	chooseExtractedGameFolder: chooseExtractedGameFolder,
+	scanExtractedGames: scanExtractedGames,
+	exeGameFolder: exeGameFolder,
+	exeGameFolderSelected: exeGameFolderSelected,
+	exeGameFoldersFound: exeGameFoldersFound,
+	exeGameFoldersEmpty: exeGameFoldersEmpty,
+	detectGameExe: detectGameExe,
+	addExtractedGame: addExtractedGame,
+	exeInstallComplete: exeInstallComplete,
+	exeInstallNoArtwork: exeInstallNoArtwork,
+	exe_install_file_invalid: exe_install_file_invalid,
+	exe_install_shortcut_failed: exe_install_shortcut_failed,
+	exe_install_steam_api_unavailable: exe_install_steam_api_unavailable,
+	exe_install_backend_unavailable: exe_install_backend_unavailable,
+	exe_install_prefix_invalid: exe_install_prefix_invalid,
+	exe_install_not_started: exe_install_not_started,
+	exe_install_candidate_invalid: exe_install_candidate_invalid,
+	exe_game_folder_invalid: exe_game_folder_invalid,
+	exe_game_folder_not_allowed: exe_game_folder_not_allowed,
+	exe_install_started: exe_install_started,
+	exe_install_completed: exe_install_completed,
 	steamDefaultCompat: steamDefaultCompat,
 	applyCompatibilityTool: applyCompatibilityTool,
 	noRecommendedCompatTools: noRecommendedCompatTools,
@@ -1433,6 +1627,12 @@ const restoreMemoryTuning = callable("restore_memory_tuning");
 const getDeckRecallUpdateStatus = callable("get_deckrecall_update_status");
 const startDeckRecallUpdate = callable("start_deckrecall_update");
 const getDownloadJobs = callable("get_download_jobs");
+const beginExeInstall = callable("begin_exe_install");
+const listExeInstallCandidates = callable("list_exe_install_candidates");
+const resolveExeInstallCandidate = callable("resolve_exe_install_candidate");
+const listExeGameFolders = callable("list_exe_game_folders");
+const listExeGameCandidates = callable("list_exe_game_candidates");
+const resolveExeGameCandidate = callable("resolve_exe_game_candidate");
 const GAME_KEY = "deckRecall.lastGame";
 const LANGUAGE_KEY = "deckRecall.language";
 const AUTO_SNAPSHOT_KEY = "deckRecall.autoSnapshot";
@@ -2196,6 +2396,171 @@ function QuickAccessContent() {
     const [updateFeedback, setUpdateFeedback] = SP_REACT.useState("");
     const [updateProgress, setUpdateProgress] = SP_REACT.useState();
     const [downloadJobs, setDownloadJobs] = SP_REACT.useState([]);
+    const [installerAppId, setInstallerAppId] = SP_REACT.useState();
+    const [installerName, setInstallerName] = SP_REACT.useState("");
+    const [exeCandidates, setExeCandidates] = SP_REACT.useState([]);
+    const [selectedExeId, setSelectedExeId] = SP_REACT.useState("");
+    const [exeInstallStatus, setExeInstallStatus] = SP_REACT.useState("");
+    const [exeInstallBusy, setExeInstallBusy] = SP_REACT.useState(false);
+    const [exeCompatTool, setExeCompatTool] = SP_REACT.useState("proton_experimental");
+    const [gameFolders, setGameFolders] = SP_REACT.useState([]);
+    const [selectedGameFolder, setSelectedGameFolder] = SP_REACT.useState("");
+    const [gameExeCandidates, setGameExeCandidates] = SP_REACT.useState([]);
+    const [selectedGameExe, setSelectedGameExe] = SP_REACT.useState("");
+    const chooseAndRunExeInstaller = async () => {
+        DFL.Navigation.CloseSideMenus();
+        setExeInstallBusy(true);
+        setExeInstallStatus("");
+        try {
+            const selected = await openFilePicker(0 /* FileSelectionType.FILE */, "/home/deck/Downloads", true, undefined, /\.exe$/i, undefined, false, true);
+            const installer = exeSelectionPath(selected);
+            if (!installer)
+                throw new Error("exe_install_file_invalid");
+            const name = cleanExeName(installer);
+            const apps = globalThis.SteamClient?.Apps;
+            if (!apps?.AddShortcut || !apps?.RunGame)
+                throw new Error("exe_install_steam_api_unavailable");
+            const appId = await createInstallerShortcut(apps, name, installer, exeCompatTool);
+            try {
+                await beginExeInstall(String(appId));
+            }
+            catch (error) {
+                apps.RemoveShortcut?.(appId);
+                throw error;
+            }
+            setInstallerAppId(appId);
+            setInstallerName(name);
+            setExeCandidates([]);
+            setSelectedExeId("");
+            launchInstaller(apps, appId);
+            setExeInstallStatus(t("exeInstallerRunning"));
+        }
+        catch (error) {
+            const code = normalizeError(error);
+            setExeInstallStatus(t(code));
+            toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
+        }
+        finally {
+            setExeInstallBusy(false);
+        }
+    };
+    const scanExtractedGames = async () => {
+        setExeInstallBusy(true);
+        setExeInstallStatus("");
+        try {
+            const result = await listExeGameFolders();
+            setGameFolders(result.folders);
+            setSelectedGameFolder(result.folders[0]?.id ?? "");
+            setGameExeCandidates([]);
+            setSelectedGameExe("");
+            setExeInstallStatus(result.folders.length ? t("exeGameFoldersFound", { count: String(result.folders.length) }) : t("exeGameFoldersEmpty"));
+        }
+        catch (error) {
+            setExeInstallStatus(t(normalizeError(error)));
+        }
+        finally {
+            setExeInstallBusy(false);
+        }
+    };
+    const chooseExtractedGameFolder = async () => {
+        DFL.Navigation.CloseSideMenus();
+        setExeInstallBusy(true);
+        setExeInstallStatus("");
+        try {
+            const selected = await openFilePicker(1 /* FileSelectionType.FOLDER */, "/home/deck/Downloads", true, true, undefined, undefined, false, true);
+            const selectedPath = folderSelectionPath(selected);
+            if (!selectedPath)
+                throw new Error("exe_game_folder_invalid");
+            const result = await listExeGameFolders();
+            setGameFolders(result.folders);
+            const matched = result.folders.find((folder) => folder.location.replace(/\/+$/, "") === selectedPath);
+            if (!matched)
+                throw new Error("exe_game_folder_not_allowed");
+            setSelectedGameFolder(matched.id);
+            setGameExeCandidates([]);
+            setSelectedGameExe("");
+            setExeInstallStatus(t("exeGameFolderSelected", { name: matched.name }));
+        }
+        catch (error) {
+            setExeInstallStatus(t(normalizeError(error)));
+        }
+        finally {
+            setExeInstallBusy(false);
+        }
+    };
+    const scanSelectedGameFolder = async () => {
+        if (!selectedGameFolder)
+            return;
+        setExeInstallBusy(true);
+        try {
+            const result = await listExeGameCandidates(selectedGameFolder);
+            setGameExeCandidates(result.candidates);
+            setSelectedGameExe(result.candidates[0]?.id ?? "");
+            setExeInstallStatus(result.candidates.length ? t("exeCandidatesFound", { count: String(result.candidates.length) }) : t("exeCandidatesEmpty"));
+        }
+        catch (error) {
+            setExeInstallStatus(t(normalizeError(error)));
+        }
+        finally {
+            setExeInstallBusy(false);
+        }
+    };
+    const addExtractedGame = async () => {
+        if (!selectedGameFolder || !selectedGameExe)
+            return;
+        setExeInstallBusy(true);
+        try {
+            const candidate = await resolveExeGameCandidate(selectedGameFolder, selectedGameExe);
+            const apps = globalThis.SteamClient?.Apps;
+            if (!apps?.AddShortcut || !apps?.CreateDesktopShortcutForApp)
+                throw new Error("exe_install_steam_api_unavailable");
+            await createGameShortcut(apps, candidate, exeCompatTool);
+            setExeInstallStatus(t("exeInstallComplete", { name: candidate.name }));
+        }
+        catch (error) {
+            setExeInstallStatus(t(normalizeError(error)));
+        }
+        finally {
+            setExeInstallBusy(false);
+        }
+    };
+    const scanInstalledExecutables = async () => {
+        if (!installerAppId)
+            return;
+        setExeInstallBusy(true);
+        try {
+            const result = await listExeInstallCandidates(String(installerAppId));
+            setExeCandidates(result.candidates);
+            setSelectedExeId(result.candidates[0]?.id ?? "");
+            setExeInstallStatus(result.candidates.length ? t("exeCandidatesFound", { count: String(result.candidates.length) }) : t("exeCandidatesEmpty"));
+        }
+        catch (error) {
+            setExeInstallStatus(t(normalizeError(error)));
+        }
+        finally {
+            setExeInstallBusy(false);
+        }
+    };
+    const finishExeInstall = async () => {
+        if (!installerAppId || !selectedExeId)
+            return;
+        setExeInstallBusy(true);
+        try {
+            const candidate = await resolveExeInstallCandidate(String(installerAppId), selectedExeId);
+            const apps = globalThis.SteamClient?.Apps;
+            if (!apps?.SetShortcutExe || !apps?.CreateDesktopShortcutForApp)
+                throw new Error("exe_install_steam_api_unavailable");
+            finalizeInstallerShortcut(apps, installerAppId, candidate, installerName);
+            setExeInstallStatus(t("exeInstallComplete", { name: installerName || candidate.name }));
+            toaster.toast({ title: "DeckRecall", body: t("exeInstallComplete", { name: installerName || candidate.name }), duration: 6000, showToast: true });
+        }
+        catch (error) {
+            setExeInstallStatus(t(normalizeError(error)));
+        }
+        finally {
+            setExeInstallBusy(false);
+        }
+    };
     const checkDeckRecallUpdate = async () => {
         setCheckingUpdate(true);
         setUpdateFeedback("");
@@ -2299,7 +2664,17 @@ function QuickAccessContent() {
                             const value = data;
                             storageSet(LANGUAGE_KEY, value);
                             setPreference(value);
-                        } }) }) }), SP_JSX.jsxs(DFL.PanelSection, { title: t("installCompatibilityTools"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => requestOfficialProtonInstall(PROTON_EXPERIMENTAL_APP_ID, t("protonExperimentalName")), children: t("downloadProtonExperimental") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => requestOfficialProtonInstall(PROTON_10_APP_ID, t("proton10Name")), children: t("downloadProton10") }) }), officialInstallerOpened && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: t("officialInstallerOpened", { tool: officialInstallerOpened }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: installingGe, onClick: () => void installGeProton(), children: installingGe ? t("geProtonInstalling") : t("installGeProton") }) }), geStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: geStatus }) })] }), SP_JSX.jsx(MemoryTuningPanel, { t: t }), SP_JSX.jsxs(DFL.PanelSection, { title: t("gameMenuEntry"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: t("gameMenuInstructions") }), recentGame && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", onClick: () => DFL.Navigation.Navigate(`/deckrecall/${recentGame.id}`), children: [t("openRecentGame"), " \u00B7 ", recentGame.name] }) })] })] });
+                        } }) }) }), SP_JSX.jsxs(DFL.PanelSection, { title: t("installCompatibilityTools"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => requestOfficialProtonInstall(PROTON_EXPERIMENTAL_APP_ID, t("protonExperimentalName")), children: t("downloadProtonExperimental") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => requestOfficialProtonInstall(PROTON_10_APP_ID, t("proton10Name")), children: t("downloadProton10") }) }), officialInstallerOpened && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: t("officialInstallerOpened", { tool: officialInstallerOpened }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: installingGe, onClick: () => void installGeProton(), children: installingGe ? t("geProtonInstalling") : t("installGeProton") }) }), geStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600 }, children: geStatus }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: t("exeInstallTitle"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: t("exeInstallDescription") }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("exeInstallCompatTool"), selectedOption: exeCompatTool, rgOptions: [
+                                { data: "proton_experimental", label: t("protonExperimentalName") },
+                                { data: "proton_10", label: t("proton10Name") },
+                            ], onChange: ({ data }) => setExeCompatTool(String(data)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: t("exeInstallerMode") }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: exeInstallBusy, onClick: () => void chooseAndRunExeInstaller(), children: t("chooseExeInstaller") }) }), installerAppId && SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: exeInstallBusy, onClick: () => void scanInstalledExecutables(), children: t("scanInstalledExe") }) }), exeCandidates.length > 0 && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("installedExe"), selectedOption: selectedExeId, rgOptions: exeCandidates.map((candidate) => ({
+                                        data: candidate.id,
+                                        label: `${candidate.name}${candidate.new ? ` · ${t("newExe")}` : ""} · ${candidate.relative}`,
+                                    })), onChange: ({ data }) => setSelectedExeId(String(data)) }) }), selectedExeId && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: exeInstallBusy, onClick: () => void finishExeInstall(), children: t("addInstalledExe") }) })] }), SP_JSX.jsx(DFL.PanelSectionRow, { children: t("exeExtractedMode") }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: exeInstallBusy, onClick: () => void chooseExtractedGameFolder(), children: t("chooseExtractedGameFolder") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: exeInstallBusy, onClick: () => void scanExtractedGames(), children: t("scanExtractedGames") }) }), gameFolders.length > 0 && SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("exeGameFolder"), selectedOption: selectedGameFolder, rgOptions: gameFolders.map((folder) => ({ data: folder.id, label: `${folder.name} · ${folder.location}` })), onChange: ({ data }) => {
+                                        setSelectedGameFolder(String(data));
+                                        setGameExeCandidates([]);
+                                        setSelectedGameExe("");
+                                    } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: exeInstallBusy || !selectedGameFolder, onClick: () => void scanSelectedGameFolder(), children: t("detectGameExe") }) })] }), gameExeCandidates.length > 0 && SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: t("installedExe"), selectedOption: selectedGameExe, rgOptions: gameExeCandidates.map((candidate) => ({ data: candidate.id, label: `${candidate.name} · ${candidate.relative}` })), onChange: ({ data }) => setSelectedGameExe(String(data)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: exeInstallBusy || !selectedGameExe, onClick: () => void addExtractedGame(), children: t("addExtractedGame") }) })] }), exeInstallStatus && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { color: "#7dd3fc", fontWeight: 600, overflowWrap: "anywhere" }, children: exeInstallStatus }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: t("exeInstallNoArtwork") })] }), SP_JSX.jsx(MemoryTuningPanel, { t: t }), SP_JSX.jsxs(DFL.PanelSection, { title: t("gameMenuEntry"), children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: t("gameMenuInstructions") }), recentGame && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", onClick: () => DFL.Navigation.Navigate(`/deckrecall/${recentGame.id}`), children: [t("openRecentGame"), " \u00B7 ", recentGame.name] }) })] })] });
 }
 function PageRouter() {
     const params = DFL.useParams();

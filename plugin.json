@@ -4,8 +4,8 @@
   "flags": ["root"],
   "api_version": 1,
   "publish": {
-    "tags": ["backup", "diagnostics", "steam-deck"],
-    "description": "Safe per-game compatibility-state snapshots and rollback.",
+    "tags": ["backup", "diagnostics", "steam-deck", "proton", "non-steam"],
+    "description": "Safe game-state snapshots plus guided Proton installation and non-Steam EXE onboarding.",
     "image": "https://opengraph.githubassets.com/1/Ren-Amamiya-pixle/DeckRecall"
   }
 }

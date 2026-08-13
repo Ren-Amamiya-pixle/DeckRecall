@@ -25,6 +25,16 @@ import {
 } from "./compat";
 import { installGameContextMenuPatch } from "./contextMenuPatch";
 import { normalizeError } from "./errors";
+import {
+  cleanExeName,
+  createGameShortcut,
+  createInstallerShortcut,
+  ExeInstallCandidate,
+  exeSelectionPath,
+  folderSelectionPath,
+  finalizeInstallerShortcut,
+  launchInstaller,
+} from "./exeInstall";
 import { Language, resolveLanguage, translate } from "./i18n";
 import { buildLaunchOptions, EMPTY_PROFILE, LaunchProfile, rebaseLaunchProfile } from "./launch";
 import { MemoryStatus, memoryTuningConfigured, normalizeMemoryStatus } from "./memory";
@@ -50,6 +60,7 @@ type DownloadJob = DownloadProgress & {
 type TrainerDownload = { url: string; title: string; directory: string };
 type TrainerSaved = { path: string; title: string; directory: string };
 type TrainerCompatVersion = "GE-Proton7-55" | "GE-Proton8-25" | "GE-Proton9-27" | "GE-Proton10-29";
+type ExeGameFolder = { id: string; name: string; location: string };
 type AppDetails = { strLaunchOptions: string; strCompatToolName: string; strCompatToolDisplayName: string };
 
 const getDiagnostics = callable<[appId: string], Diagnostic>("get_diagnostics");
@@ -72,6 +83,12 @@ const restoreMemoryTuning = callable<[], { ok: boolean }>("restore_memory_tuning
 const getDeckRecallUpdateStatus = callable<[], DeckRecallUpdateStatus>("get_deckrecall_update_status");
 const startDeckRecallUpdate = callable<[], DownloadJob>("start_deckrecall_update");
 const getDownloadJobs = callable<[], DownloadJob[]>("get_download_jobs");
+const beginExeInstall = callable<[appId: string], { ok: boolean; baseline_count: number }>("begin_exe_install");
+const listExeInstallCandidates = callable<[appId: string], { ok: boolean; candidates: ExeInstallCandidate[]; new_count: number }>("list_exe_install_candidates");
+const resolveExeInstallCandidate = callable<[appId: string, candidateId: string], { path: string; directory: string; name: string }>("resolve_exe_install_candidate");
+const listExeGameFolders = callable<[], { ok: boolean; folders: ExeGameFolder[] }>("list_exe_game_folders");
+const listExeGameCandidates = callable<[folderId: string], { ok: boolean; candidates: ExeInstallCandidate[] }>("list_exe_game_candidates");
+const resolveExeGameCandidate = callable<[folderId: string, candidateId: string], { path: string; directory: string; name: string }>("resolve_exe_game_candidate");
 
 
 const GAME_KEY = "deckRecall.lastGame";
@@ -1063,6 +1080,171 @@ function QuickAccessContent() {
   const [updateFeedback, setUpdateFeedback] = useState("");
   const [updateProgress, setUpdateProgress] = useState<DownloadProgress>();
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
+  const [installerAppId, setInstallerAppId] = useState<number>();
+  const [installerName, setInstallerName] = useState("");
+  const [exeCandidates, setExeCandidates] = useState<ExeInstallCandidate[]>([]);
+  const [selectedExeId, setSelectedExeId] = useState("");
+  const [exeInstallStatus, setExeInstallStatus] = useState("");
+  const [exeInstallBusy, setExeInstallBusy] = useState(false);
+  const [exeCompatTool, setExeCompatTool] = useState("proton_experimental");
+  const [gameFolders, setGameFolders] = useState<ExeGameFolder[]>([]);
+  const [selectedGameFolder, setSelectedGameFolder] = useState("");
+  const [gameExeCandidates, setGameExeCandidates] = useState<ExeInstallCandidate[]>([]);
+  const [selectedGameExe, setSelectedGameExe] = useState("");
+
+  const chooseAndRunExeInstaller = async () => {
+    Navigation.CloseSideMenus();
+    setExeInstallBusy(true);
+    setExeInstallStatus("");
+    try {
+      const selected = await openFilePicker(
+        FileSelectionType.FILE,
+        "/home/deck/Downloads",
+        true,
+        undefined,
+        /\.exe$/i,
+        undefined,
+        false,
+        true,
+      );
+      const installer = exeSelectionPath(selected);
+      if (!installer) throw new Error("exe_install_file_invalid");
+      const name = cleanExeName(installer);
+      const apps = (globalThis as any).SteamClient?.Apps;
+      if (!apps?.AddShortcut || !apps?.RunGame) throw new Error("exe_install_steam_api_unavailable");
+      const appId = await createInstallerShortcut(apps, name, installer, exeCompatTool);
+      try {
+        await beginExeInstall(String(appId));
+      } catch (error) {
+        apps.RemoveShortcut?.(appId);
+        throw error;
+      }
+      setInstallerAppId(appId);
+      setInstallerName(name);
+      setExeCandidates([]);
+      setSelectedExeId("");
+      launchInstaller(apps, appId);
+      setExeInstallStatus(t("exeInstallerRunning"));
+    } catch (error) {
+      const code = normalizeError(error);
+      setExeInstallStatus(t(code));
+      toaster.toast({ title: "DeckRecall", body: t(code), duration: 6000, showToast: true });
+    } finally {
+      setExeInstallBusy(false);
+    }
+  };
+
+  const scanExtractedGames = async () => {
+    setExeInstallBusy(true);
+    setExeInstallStatus("");
+    try {
+      const result = await listExeGameFolders();
+      setGameFolders(result.folders);
+      setSelectedGameFolder(result.folders[0]?.id ?? "");
+      setGameExeCandidates([]);
+      setSelectedGameExe("");
+      setExeInstallStatus(result.folders.length ? t("exeGameFoldersFound", { count: String(result.folders.length) }) : t("exeGameFoldersEmpty"));
+    } catch (error) {
+      setExeInstallStatus(t(normalizeError(error)));
+    } finally {
+      setExeInstallBusy(false);
+    }
+  };
+
+  const chooseExtractedGameFolder = async () => {
+    Navigation.CloseSideMenus();
+    setExeInstallBusy(true);
+    setExeInstallStatus("");
+    try {
+      const selected = await openFilePicker(
+        FileSelectionType.FOLDER,
+        "/home/deck/Downloads",
+        true,
+        true,
+        undefined,
+        undefined,
+        false,
+        true,
+      );
+      const selectedPath = folderSelectionPath(selected);
+      if (!selectedPath) throw new Error("exe_game_folder_invalid");
+      const result = await listExeGameFolders();
+      setGameFolders(result.folders);
+      const matched = result.folders.find((folder) => folder.location.replace(/\/+$/, "") === selectedPath);
+      if (!matched) throw new Error("exe_game_folder_not_allowed");
+      setSelectedGameFolder(matched.id);
+      setGameExeCandidates([]);
+      setSelectedGameExe("");
+      setExeInstallStatus(t("exeGameFolderSelected", { name: matched.name }));
+    } catch (error) {
+      setExeInstallStatus(t(normalizeError(error)));
+    } finally {
+      setExeInstallBusy(false);
+    }
+  };
+
+  const scanSelectedGameFolder = async () => {
+    if (!selectedGameFolder) return;
+    setExeInstallBusy(true);
+    try {
+      const result = await listExeGameCandidates(selectedGameFolder);
+      setGameExeCandidates(result.candidates);
+      setSelectedGameExe(result.candidates[0]?.id ?? "");
+      setExeInstallStatus(result.candidates.length ? t("exeCandidatesFound", { count: String(result.candidates.length) }) : t("exeCandidatesEmpty"));
+    } catch (error) {
+      setExeInstallStatus(t(normalizeError(error)));
+    } finally {
+      setExeInstallBusy(false);
+    }
+  };
+
+  const addExtractedGame = async () => {
+    if (!selectedGameFolder || !selectedGameExe) return;
+    setExeInstallBusy(true);
+    try {
+      const candidate = await resolveExeGameCandidate(selectedGameFolder, selectedGameExe);
+      const apps = (globalThis as any).SteamClient?.Apps;
+      if (!apps?.AddShortcut || !apps?.CreateDesktopShortcutForApp) throw new Error("exe_install_steam_api_unavailable");
+      await createGameShortcut(apps, candidate, exeCompatTool);
+      setExeInstallStatus(t("exeInstallComplete", { name: candidate.name }));
+    } catch (error) {
+      setExeInstallStatus(t(normalizeError(error)));
+    } finally {
+      setExeInstallBusy(false);
+    }
+  };
+
+  const scanInstalledExecutables = async () => {
+    if (!installerAppId) return;
+    setExeInstallBusy(true);
+    try {
+      const result = await listExeInstallCandidates(String(installerAppId));
+      setExeCandidates(result.candidates);
+      setSelectedExeId(result.candidates[0]?.id ?? "");
+      setExeInstallStatus(result.candidates.length ? t("exeCandidatesFound", { count: String(result.candidates.length) }) : t("exeCandidatesEmpty"));
+    } catch (error) {
+      setExeInstallStatus(t(normalizeError(error)));
+    } finally {
+      setExeInstallBusy(false);
+    }
+  };
+
+  const finishExeInstall = async () => {
+    if (!installerAppId || !selectedExeId) return;
+    setExeInstallBusy(true);
+    try {
+      const candidate = await resolveExeInstallCandidate(String(installerAppId), selectedExeId);
+      const apps = (globalThis as any).SteamClient?.Apps;
+      if (!apps?.SetShortcutExe || !apps?.CreateDesktopShortcutForApp) throw new Error("exe_install_steam_api_unavailable");
+      finalizeInstallerShortcut(apps, installerAppId, candidate, installerName);
+      setExeInstallStatus(t("exeInstallComplete", { name: installerName || candidate.name }));
+      toaster.toast({ title: "DeckRecall", body: t("exeInstallComplete", { name: installerName || candidate.name }), duration: 6000, showToast: true });
+    } catch (error) {
+      setExeInstallStatus(t(normalizeError(error)));
+    } finally {
+      setExeInstallBusy(false);
+    }
+  };
 
   const checkDeckRecallUpdate = async () => {
     setCheckingUpdate(true);
@@ -1213,6 +1395,96 @@ function QuickAccessContent() {
         </ButtonItem>
       </PanelSectionRow>
       {geStatus && <PanelSectionRow><div style={{ color: "#7dd3fc", fontWeight: 600 }}>{geStatus}</div></PanelSectionRow>}
+    </PanelSection>
+    <PanelSection title={t("exeInstallTitle")}>
+      <PanelSectionRow>{t("exeInstallDescription")}</PanelSectionRow>
+      <PanelSectionRow>
+        <DropdownItem
+          label={t("exeInstallCompatTool")}
+          selectedOption={exeCompatTool}
+          rgOptions={[
+            { data: "proton_experimental", label: t("protonExperimentalName") },
+            { data: "proton_10", label: t("proton10Name") },
+          ]}
+          onChange={({ data }) => setExeCompatTool(String(data))}
+        />
+      </PanelSectionRow>
+      <PanelSectionRow>{t("exeInstallerMode")}</PanelSectionRow>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={exeInstallBusy} onClick={() => void chooseAndRunExeInstaller()}>
+          {t("chooseExeInstaller")}
+        </ButtonItem>
+      </PanelSectionRow>
+      {installerAppId && <>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={exeInstallBusy} onClick={() => void scanInstalledExecutables()}>
+            {t("scanInstalledExe")}
+          </ButtonItem>
+        </PanelSectionRow>
+        {exeCandidates.length > 0 && <PanelSectionRow>
+          <DropdownItem
+            label={t("installedExe")}
+            selectedOption={selectedExeId}
+            rgOptions={exeCandidates.map((candidate) => ({
+              data: candidate.id,
+              label: `${candidate.name}${candidate.new ? ` · ${t("newExe")}` : ""} · ${candidate.relative}`,
+            }))}
+            onChange={({ data }) => setSelectedExeId(String(data))}
+          />
+        </PanelSectionRow>}
+        {selectedExeId && <PanelSectionRow>
+          <ButtonItem layout="below" disabled={exeInstallBusy} onClick={() => void finishExeInstall()}>
+            {t("addInstalledExe")}
+          </ButtonItem>
+        </PanelSectionRow>}
+      </>}
+      <PanelSectionRow>{t("exeExtractedMode")}</PanelSectionRow>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={exeInstallBusy} onClick={() => void chooseExtractedGameFolder()}>
+          {t("chooseExtractedGameFolder")}
+        </ButtonItem>
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={exeInstallBusy} onClick={() => void scanExtractedGames()}>
+          {t("scanExtractedGames")}
+        </ButtonItem>
+      </PanelSectionRow>
+      {gameFolders.length > 0 && <>
+        <PanelSectionRow>
+          <DropdownItem
+            label={t("exeGameFolder")}
+            selectedOption={selectedGameFolder}
+            rgOptions={gameFolders.map((folder) => ({ data: folder.id, label: `${folder.name} · ${folder.location}` }))}
+            onChange={({ data }) => {
+              setSelectedGameFolder(String(data));
+              setGameExeCandidates([]);
+              setSelectedGameExe("");
+            }}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={exeInstallBusy || !selectedGameFolder} onClick={() => void scanSelectedGameFolder()}>
+            {t("detectGameExe")}
+          </ButtonItem>
+        </PanelSectionRow>
+      </>}
+      {gameExeCandidates.length > 0 && <>
+        <PanelSectionRow>
+          <DropdownItem
+            label={t("installedExe")}
+            selectedOption={selectedGameExe}
+            rgOptions={gameExeCandidates.map((candidate) => ({ data: candidate.id, label: `${candidate.name} · ${candidate.relative}` }))}
+            onChange={({ data }) => setSelectedGameExe(String(data))}
+          />
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={exeInstallBusy || !selectedGameExe} onClick={() => void addExtractedGame()}>
+            {t("addExtractedGame")}
+          </ButtonItem>
+        </PanelSectionRow>
+      </>}
+      {exeInstallStatus && <PanelSectionRow><div style={{ color: "#7dd3fc", fontWeight: 600, overflowWrap: "anywhere" }}>{exeInstallStatus}</div></PanelSectionRow>}
+      <PanelSectionRow>{t("exeInstallNoArtwork")}</PanelSectionRow>
     </PanelSection>
     <MemoryTuningPanel t={t} />
     <PanelSection title={t("gameMenuEntry")}>

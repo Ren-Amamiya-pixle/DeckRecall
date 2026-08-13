@@ -120,6 +120,7 @@ class Plugin:
         self.download_worker: asyncio.Task[None] | None = None
         self.download_job_sequence = 0
         self.memory: Any = None
+        self.exe_installs: Any = None
 
     async def _main(self) -> None:
         if decky: decky.logger.info("DeckRecall backend started")
@@ -296,6 +297,46 @@ class Plugin:
         self._event("0", "memory_restored", {})
         return result
 
+    async def begin_exe_install(self, app_id: str) -> dict[str, Any]:
+        """Record one fixed compatdata prefix before Steam launches an installer."""
+        result = await asyncio.to_thread(self._exe_install_manager().begin, app_id)
+        self._event(self._app_id(app_id), "exe_install_started", {})
+        return result
+
+    async def list_exe_install_candidates(self, app_id: str) -> dict[str, Any]:
+        """List ranked EXEs from the fixed compatdata prefix; no UI path is accepted."""
+        return await asyncio.to_thread(self._exe_install_manager().candidates, app_id)
+
+    async def resolve_exe_install_candidate(
+        self, app_id: str, candidate_id: str
+    ) -> dict[str, str]:
+        """Resolve an opaque candidate ID back into the already-scanned fixed prefix."""
+        result = await asyncio.to_thread(
+            self._exe_install_manager().resolve, app_id, candidate_id
+        )
+        self._event(self._app_id(app_id), "exe_install_completed", {})
+        return result
+
+    async def list_exe_game_folders(self) -> dict[str, Any]:
+        """Return EXE-bearing folders below fixed user/removable-media roots."""
+        return await asyncio.to_thread(self._exe_install_manager().list_game_folders)
+
+    async def list_exe_game_candidates(self, folder_id: str) -> dict[str, Any]:
+        """Rank likely game executables for one opaque allowlisted folder ID."""
+        return await asyncio.to_thread(
+            self._exe_install_manager().game_folder_candidates, folder_id
+        )
+
+    async def resolve_exe_game_candidate(
+        self, folder_id: str, candidate_id: str
+    ) -> dict[str, str]:
+        """Resolve only a candidate previously returned from a fixed game root."""
+        return await asyncio.to_thread(
+            self._exe_install_manager().resolve_game_folder_candidate,
+            folder_id,
+            candidate_id,
+        )
+
     def _memory_tuner(self) -> Any:
         if self.memory is None:
             try:
@@ -304,6 +345,15 @@ class Plugin:
                 raise ValueError("memory_backend_unavailable") from error
             self.memory = MemoryTuner()
         return self.memory
+
+    def _exe_install_manager(self) -> Any:
+        if self.exe_installs is None:
+            try:
+                from backend.exe_install import ExeInstallManager
+            except ImportError as error:
+                raise ValueError("exe_install_backend_unavailable") from error
+            self.exe_installs = ExeInstallManager(self.steam_root, self.data_root)
+        return self.exe_installs
 
     async def install_latest_ge_proton(self) -> dict[str, Any]:
         """Download, verify and install the latest author-published GE-Proton."""

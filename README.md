@@ -1,5 +1,15 @@
 # DeckRecall
 
+DeckRecall 0.4 adds a guided Windows EXE workflow for Steam Deck:
+
+- choose an installer EXE and run it as a Steam non-Steam shortcut with Proton;
+- scan only that shortcut's fixed Proton prefix after installation and rank newly created EXEs;
+- confirm the real program, reuse the same prefix, and create a Steam desktop shortcut;
+- scan extracted games under Downloads, Documents, Desktop, and removable storage, rank likely game EXEs, then add the confirmed executable with Proton;
+- never download or assign artwork automatically.
+
+The final executable is always confirmed by the user. Installers, uninstallers, updaters, crash reporters, redistributables, and Windows system tools are deprioritized or filtered.
+
 An independent [Decky Loader](https://decky.xyz/) plugin for SteamOS that remembers a known-good Steam game compatibility state, reports later changes, and restores it with a one-step undo.
 
 ## v0.3 scope
